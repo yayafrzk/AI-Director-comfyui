@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Runtime data
+/data/*.db
+/logs/
+/temp/
+
+# Local generated media
+/projects/*/source/
+/projects/*/images/
+/projects/*/videos/
+/projects/*/audio/
+/projects/*/thumbnails/
+/projects/*/exports/
+
+# Local ComfyUI assets and models
+/ComfyUI/input/
+/ComfyUI/output/
+/ComfyUI/models/
+/comfyui/input/
+/comfyui/output/
+/comfyui/models/
+/models/
