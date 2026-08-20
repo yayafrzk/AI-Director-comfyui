@@ -1,13 +1,68 @@
+@import "tailwindcss";
+
 :root {
-  font-family: system-ui, sans-serif;
-  color: #111827;
-  background: #ffffff;
+  color-scheme: dark;
+  --canvas: #0b0e12;
+  --surface-base: #10151b;
+  --surface-raised: #151c24;
+  --border-subtle: #27313b;
+  --border-strong: #35424f;
+  --text-primary: #f1f5f0;
+  --text-muted: #8d98a5;
+  --accent: #d6a861;
+  --accent-soft: #2e2619;
+  --status-offline: #a86a65;
+  --focus: #79a8df;
+  font-family: Inter, "Segoe UI Variable", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-color: var(--border-strong) var(--canvas);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--canvas);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid var(--canvas);
+  background: var(--border-strong);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+html {
+  min-width: 320px;
+  background: var(--canvas);
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
+  background: var(--canvas);
 }
 
-main {
-  padding: 2rem;
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
+  }
 }
