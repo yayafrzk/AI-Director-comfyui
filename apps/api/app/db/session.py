@@ -39,3 +39,12 @@ def create_session_factory(database_engine: Engine | None = None):
         expire_on_commit=False,
         class_=Session,
     )
+
+
+def get_db():
+    """Provide one database session for the duration of a request."""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
