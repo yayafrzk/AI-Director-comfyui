@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.project import Project
+from app.models.workflow_template import WorkflowTemplate
 from app.models.scene import Scene
+from app.schemas.generation import GenerationRequest, GenerationSubmitRead
 from app.schemas.scene import SceneCreate, SceneRead, SceneReorderRequest, SceneUpdate
+from app.services.generation_service import GenerationServiceError, submit_generation
 
 
 router = APIRouter(tags=["scenes"])
@@ -194,3 +197,23 @@ def reorder_project_scenes(
         "data": [SceneRead.model_validate(ordered_scenes[scene_id]) for scene_id in scene_ids],
         "error": None,
     }
+
+@router.post("/scenes/{scene_id}/generate", response_model=None)
+async def generate_scene(
+    scene_id: str,
+    request: GenerationRequest,
+    db: Session = Depends(get_db),
+) -> dict | JSONResponse:
+    scene = db.get(Scene, scene_id)
+    if scene is None:
+        return _scene_not_found()
+    workflow_template = db.get(WorkflowTemplate, request.workflow_template_id)
+    if workflow_template is None:
+        return JSONResponse(status_code=404, content={"data": None, "error": {"code": "WORKFLOW_TEMPLATE_NOT_FOUND", "message": "Workflow template not found"}})
+    if not workflow_template.is_enabled:
+        return JSONResponse(status_code=400, content={"data": None, "error": {"code": "WORKFLOW_TEMPLATE_DISABLED", "message": "Workflow template is disabled"}})
+    try:
+        job = await submit_generation(db, scene, workflow_template, request.seed, request.params)
+    except GenerationServiceError as error:
+        return JSONResponse(status_code=error.status_code, content={"data": None, "error": {"code": error.code, "message": str(error)}})
+    return {"data": GenerationSubmitRead(job_id=job.id, status="queued"), "error": None}
