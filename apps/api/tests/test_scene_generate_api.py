@@ -46,7 +46,9 @@ def _mock_success(monkeypatch):
     manifest=WorkflowManifest.model_validate({"id":"w","name":"w","version":"1","inputs":{"prompt":{"node_id":"1","field":"text","required":True},"seed":{"node_id":"1","field":"text"}}})
     monkeypatch.setattr(generation_service,"load_workflow_template",lambda _: LoadedWorkflowTemplate({"1":{"inputs":{"text":""}}},manifest))
     monkeypatch.setattr(generation_service,"build_workflow",lambda *_: {"built":True})
-    async def submit(_): return "prompt-123"
+    async def submit(_, client_id=None):
+        assert client_id
+        return "prompt-123"
     monkeypatch.setattr(generation_service,"submit_prompt",submit)
 
 

@@ -50,9 +50,11 @@ async def check_health() -> ComfyUIHealthRead:
     return ComfyUIHealthRead(status="online")
 
 
-async def submit_prompt(workflow: dict[str, object]) -> str:
+async def submit_prompt(workflow: dict[str, object], client_id: str | None = None) -> str:
     url = _endpoint_url("prompt")
     payload = {"prompt": workflow}
+    if client_id is not None:
+        payload["client_id"] = client_id
     try:
         json.dumps(payload)
     except (TypeError, ValueError) as error:

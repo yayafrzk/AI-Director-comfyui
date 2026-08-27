@@ -35,7 +35,8 @@ def test_submit_generation_persists_pending_then_queues(tmp_path, monkeypatch) -
             seen = []
             def load(_): return _loaded()
             def build(loaded, params): seen.append(params); return {"built": True}
-            async def submit(workflow):
+            async def submit(workflow, client_id=None):
+                assert client_id
                 assert session.get(GenerationJob, seen and session.scalar(__import__('sqlalchemy').select(GenerationJob.id))) is not None
                 return "prompt-123"
             monkeypatch.setattr(generation_service, "load_workflow_template", load)

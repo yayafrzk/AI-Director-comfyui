@@ -67,6 +67,15 @@ def test_submit_prompt_posts_workflow_and_returns_prompt_id(monkeypatch) -> None
     assert workflow == original_workflow
 
 
+def test_submit_prompt_includes_client_id_only_when_supplied(monkeypatch) -> None:
+    workflow = _workflow()
+    client = StubAsyncClient(httpx.Response(200, json={"prompt_id": "id"}))
+    monkeypatch.setattr(comfyui_client.httpx, "AsyncClient", lambda **_: client)
+
+    asyncio.run(submit_prompt(workflow, client_id="client-1"))
+
+    assert client.payload == {"prompt": workflow, "client_id": "client-1"}
+
 def test_submit_prompt_uses_configured_url_without_double_slash(monkeypatch) -> None:
     monkeypatch.setenv("COMFYUI_BASE_URL", "http://192.168.1.10:8188/")
     _, client = _submit_with_response(monkeypatch, httpx.Response(200, json={"prompt_id": "id"}))
