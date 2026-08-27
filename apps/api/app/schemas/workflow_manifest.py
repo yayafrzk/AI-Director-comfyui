@@ -7,7 +7,7 @@ class WorkflowManifestInput(BaseModel):
     node_id: str
     field: str
     type: str | None = None
-    required: bool | None = None
+    required: bool = False
 
     @field_validator("node_id", mode="before")
     @classmethod
