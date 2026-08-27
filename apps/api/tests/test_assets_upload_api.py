@@ -12,6 +12,7 @@ from app.main import app
 from app.models.asset import Asset
 from app.models.project import Project
 from app.models.scene import Scene
+from app.services.media_metadata import FFprobeNotFoundError, VideoMetadata, VideoMetadataProbeError
 
 
 @pytest.fixture
@@ -75,14 +76,21 @@ def _scene(session_factory, project_id: str) -> Scene:
         return scene
 
 
-def _upload(request, project_id: str, filename: str = "frame.png", content: bytes = b"abcdef", **data) -> httpx.Response:
+def _upload(
+    request,
+    project_id: str,
+    filename: str = "frame.png",
+    content: bytes = b"abcdef",
+    content_type: str = "image/png",
+    **data,
+) -> httpx.Response:
     form_data = {"type": "image", "role": "first_frame"}
     form_data.update(data)
     return request(
         "POST",
         f"/api/v1/projects/{project_id}/assets/upload",
         form_data,
-        {"file": (filename, content, "image/png")},
+        {"file": (filename, content, content_type)},
     )
 
 
@@ -199,3 +207,70 @@ def test_upload_removes_final_file_when_database_commit_fails(api, monkeypatch) 
     assert list((app_data_dir / "projects" / project.id / "images").glob("*")) == []
     with session_factory() as session:
         assert session.query(Asset).count() == 0
+
+
+def test_upload_video_persists_ffprobe_metadata(api, monkeypatch) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory, "Video metadata project")
+    probed_paths: list[Path] = []
+
+    def probe(path: Path) -> VideoMetadata:
+        probed_paths.append(path)
+        assert path.is_file()
+        return VideoMetadata(width=1920, height=1080, duration_seconds=5.0)
+
+    monkeypatch.setattr("app.api.assets.probe_video_metadata", probe)
+    response = _upload(
+        request,
+        project.id,
+        filename="视频素材.mp4",
+        content=b"video-bytes",
+        content_type="video/mp4",
+        type="video",
+        role="source_video",
+    )
+
+    assert response.status_code == 200
+    asset = response.json()["data"]
+    assert (asset["width"], asset["height"], asset["duration_seconds"]) == (1920, 1080, 5.0)
+    assert asset["relative_path"].startswith("videos/")
+    assert probed_paths == [app_data_dir / "projects" / project.id / asset["relative_path"]]
+    with session_factory() as session:
+        persisted = session.get(Asset, asset["id"])
+        assert persisted is not None
+        assert (persisted.width, persisted.height, persisted.duration_seconds) == (1920, 1080, 5.0)
+
+
+@pytest.mark.parametrize("error", [VideoMetadataProbeError("invalid"), FFprobeNotFoundError("missing")])
+def test_upload_video_probe_failure_removes_files_and_does_not_create_asset(api, monkeypatch, error) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory, "Video probe failure project")
+
+    def fail_probe(_path: Path) -> VideoMetadata:
+        raise error
+
+    monkeypatch.setattr("app.api.assets.probe_video_metadata", fail_probe)
+    response = _upload(request, project.id, filename="invalid.mp4", content_type="video/mp4", type="video", role="source_video")
+
+    is_missing = isinstance(error, FFprobeNotFoundError)
+    assert response.status_code == (503 if is_missing else 400)
+    assert response.json()["error"]["code"] == ("FFPROBE_NOT_FOUND" if is_missing else "ASSET_MEDIA_INVALID")
+    assert list((app_data_dir / "projects" / project.id / "videos").glob("*")) == []
+    with session_factory() as session:
+        assert session.query(Asset).count() == 0
+
+
+@pytest.mark.parametrize("asset_type", ["image", "audio", "reference"])
+def test_upload_non_video_does_not_probe_metadata(api, monkeypatch, asset_type: str) -> None:
+    request, session_factory, _app_data_dir = api
+    project = _project(session_factory, f"{asset_type} upload project")
+
+    def unexpected_probe(_path: Path) -> VideoMetadata:
+        raise AssertionError("non-video uploads must not call ffprobe")
+
+    monkeypatch.setattr("app.api.assets.probe_video_metadata", unexpected_probe)
+    response = _upload(request, project.id, type=asset_type, role="upload")
+
+    assert response.status_code == 200
+    asset = response.json()["data"]
+    assert (asset["width"], asset["height"], asset["duration_seconds"]) == (None, None, None)

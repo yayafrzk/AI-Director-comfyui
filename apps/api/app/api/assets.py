@@ -5,11 +5,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.project import Project
 from app.models.scene import Scene
 from app.schemas.asset import AssetRead, AssetType
+from app.services.media_metadata import (
+    FFprobeNotFoundError,
+    VideoMetadataProbeError,
+    probe_video_metadata,
+)
 from app.services.storage_assets import (
     AssetPathInvalidError,
     cleanup_asset_file,
@@ -19,6 +25,7 @@ from app.services.storage_assets import (
 
 
 router = APIRouter(tags=["assets"])
+_logger = get_logger("app")
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -64,6 +71,40 @@ async def upload_asset(
             "Asset upload failed",
         )
 
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: float | None = None
+    if type == "video":
+        try:
+            metadata = probe_video_metadata(stored_file.path)
+        except FFprobeNotFoundError:
+            cleanup_asset_file(stored_file.path)
+            _logger.error(
+                "Video asset upload failed: category=ffprobe_not_found project_id=%s scene_id=%s",
+                project_id,
+                scene_id,
+            )
+            return _error(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "FFPROBE_NOT_FOUND",
+                "ffprobe is not available",
+            )
+        except VideoMetadataProbeError:
+            cleanup_asset_file(stored_file.path)
+            _logger.warning(
+                "Video asset upload failed: category=metadata_invalid project_id=%s scene_id=%s",
+                project_id,
+                scene_id,
+            )
+            return _error(
+                status.HTTP_400_BAD_REQUEST,
+                "ASSET_MEDIA_INVALID",
+                "Unable to read video metadata",
+            )
+        width = metadata.width
+        height = metadata.height
+        duration_seconds = metadata.duration_seconds
+
     asset = Asset(
         project_id=project_id,
         scene_id=scene_id,
@@ -72,9 +113,9 @@ async def upload_asset(
         relative_path=stored_file.relative_path,
         thumbnail_path=None,
         mime_type=file.content_type or "application/octet-stream",
-        width=None,
-        height=None,
-        duration_seconds=None,
+        width=width,
+        height=height,
+        duration_seconds=duration_seconds,
         size_bytes=stored_file.size_bytes,
         hash=None,
     )
