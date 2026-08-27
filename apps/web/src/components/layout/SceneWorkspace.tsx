@@ -1,19 +1,145 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRef, useState, type DragEvent } from 'react'
 
-import { getProjectScenes } from '../../services/scenes'
+import { getProjectScenes, reorderScenes } from '../../services/scenes'
+import type { Scene } from '../../types/scene'
 import { SceneCard } from './SceneCard'
 
 type SceneWorkspaceProps = {
   projectId: string | null
 }
 
+type ReorderVariables = {
+  projectId: string
+  sceneIds: string[]
+  previousScenes: Scene[]
+}
+
+function sceneQueryKey(projectId: string | null) {
+  return ['projects', projectId, 'scenes'] as const
+}
+
+function moveScene(scenes: Scene[], sceneId: string, targetSceneId: string): Scene[] {
+  const sourceIndex = scenes.findIndex((scene) => scene.id === sceneId)
+  const targetIndex = scenes.findIndex((scene) => scene.id === targetSceneId)
+
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+    return scenes
+  }
+
+  const reorderedScenes = [...scenes]
+  const [movedScene] = reorderedScenes.splice(sourceIndex, 1)
+  reorderedScenes.splice(targetIndex, 0, movedScene)
+  return reorderedScenes
+}
+
+function hasSameSceneOrder(first: Scene[], second: Scene[]): boolean {
+  return first.length === second.length && first.every((scene, index) => scene.id === second[index]?.id)
+}
+
 export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
+  const queryClient = useQueryClient()
+  const previousScenesRef = useRef<Scene[] | null>(null)
+  const draggedSceneIdRef = useRef<string | null>(null)
+  const draggedProjectIdRef = useRef<string | null>(null)
+  const reorderLockRef = useRef(false)
+  const [draggingSceneId, setDraggingSceneId] = useState<string | null>(null)
+  const [reorderError, setReorderError] = useState<{ projectId: string; message: string } | null>(null)
+
   const scenesQuery = useQuery({
-    queryKey: ['projects', projectId, 'scenes'],
+    queryKey: sceneQueryKey(projectId),
     queryFn: () => getProjectScenes(projectId!),
     enabled: projectId !== null,
   })
   const scenes = scenesQuery.data ?? []
+  const reorderMutation = useMutation({
+    mutationFn: ({ projectId: reorderProjectId, sceneIds }: ReorderVariables) => reorderScenes(reorderProjectId, sceneIds),
+    onSuccess: (reorderedScenes, variables) => {
+      queryClient.setQueryData(sceneQueryKey(variables.projectId), reorderedScenes)
+    },
+    onError: (error, variables) => {
+      queryClient.setQueryData(sceneQueryKey(variables.projectId), variables.previousScenes)
+
+      setReorderError({
+        projectId: variables.projectId,
+        message: error instanceof Error ? error.message : '分镜排序保存失败',
+      })
+    },
+    onSettled: () => {
+      reorderLockRef.current = false
+    },
+  })
+  const isSorting = draggingSceneId !== null || reorderMutation.isPending
+  const dragDisabled = scenes.length < 2 || reorderMutation.isPending
+
+  function handleDragStart(event: DragEvent<HTMLButtonElement>, sceneId: string) {
+    if (projectId === null || reorderLockRef.current || scenes.length < 2) {
+      event.preventDefault()
+      return
+    }
+
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', sceneId)
+    previousScenesRef.current = scenes
+    draggedSceneIdRef.current = sceneId
+    draggedProjectIdRef.current = projectId
+    setDraggingSceneId(sceneId)
+    setReorderError(null)
+  }
+
+  function handleDragEnter(targetSceneId: string) {
+    const draggedSceneId = draggedSceneIdRef.current
+    const draggedProjectId = draggedProjectIdRef.current
+
+    if (
+      draggedSceneId === null ||
+      draggedProjectId === null ||
+      draggedSceneId === targetSceneId ||
+      reorderLockRef.current ||
+      draggedProjectId !== projectId
+    ) {
+      return
+    }
+
+    queryClient.setQueryData<Scene[]>(sceneQueryKey(draggedProjectId), (currentScenes = []) =>
+      moveScene(currentScenes, draggedSceneId, targetSceneId),
+    )
+  }
+
+  function handleDragEnd() {
+    const draggedProjectId = draggedProjectIdRef.current
+    const previousScenes = previousScenesRef.current
+
+    draggedSceneIdRef.current = null
+    draggedProjectIdRef.current = null
+    previousScenesRef.current = null
+
+    if (draggedProjectId === null || previousScenes === null) {
+      setDraggingSceneId(null)
+      return
+    }
+
+    if (draggedProjectId !== projectId) {
+      queryClient.setQueryData(sceneQueryKey(draggedProjectId), previousScenes)
+      setDraggingSceneId(null)
+      return
+    }
+
+    const reorderedScenes = queryClient.getQueryData<Scene[]>(sceneQueryKey(draggedProjectId)) ?? previousScenes
+
+    if (hasSameSceneOrder(previousScenes, reorderedScenes)) {
+      setDraggingSceneId(null)
+      return
+    }
+
+    reorderLockRef.current = true
+    reorderMutation.mutate({
+      projectId: draggedProjectId,
+      sceneIds: reorderedScenes.map((scene) => scene.id),
+      previousScenes,
+    })
+    setDraggingSceneId(null)
+  }
 
   return (
     <main className="min-w-0 bg-[var(--canvas)] p-4 sm:p-5 lg:p-6" aria-labelledby="scene-workspace-heading">
@@ -26,6 +152,13 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
         </div>
         <span className="font-mono text-xs text-[color:var(--text-muted)]">{scenes.length} 个镜头</span>
       </div>
+
+      {reorderError?.projectId === projectId ? (
+        <section className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-base)] px-4 py-4">
+          <p className="text-sm text-[color:var(--text-primary)]">分镜排序保存失败</p>
+          <p className="mt-1 text-xs text-[color:var(--text-muted)]">{reorderError.message}</p>
+        </section>
+      ) : null}
 
       {projectId === null ? (
         <EmptySceneState title="请选择项目" description="从左侧选择一个项目后，即可查看其分镜。" />
@@ -52,8 +185,17 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
 
       {projectId !== null && !scenesQuery.isLoading && !scenesQuery.isError && scenes.length > 0 ? (
         <section className="mt-5 space-y-3" aria-label="分镜列表">
-          {scenes.map((scene) => (
-            <SceneCard key={scene.id} scene={scene} />
+          {scenes.map((scene, index) => (
+            <SceneCard
+              key={scene.id}
+              scene={scene}
+              position={index}
+              isSorting={isSorting}
+              dragDisabled={dragDisabled}
+              onDragStart={handleDragStart}
+              onDragEnter={handleDragEnter}
+              onDragEnd={handleDragEnd}
+            />
           ))}
         </section>
       ) : null}

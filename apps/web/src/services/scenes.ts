@@ -10,8 +10,8 @@ type ApiResponse<T> = {
   error: ApiError | null
 }
 
-async function request<T>(input: RequestInfo): Promise<T> {
-  const response = await fetch(input)
+async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init)
   const payload = (await response.json()) as ApiResponse<T>
 
   if (!response.ok || payload.error) {
@@ -23,4 +23,12 @@ async function request<T>(input: RequestInfo): Promise<T> {
 
 export function getProjectScenes(projectId: string): Promise<Scene[]> {
   return request<Scene[]>(`/api/v1/projects/${projectId}/scenes`)
+}
+
+export function reorderScenes(projectId: string, sceneIds: string[]): Promise<Scene[]> {
+  return request<Scene[]>(`/api/v1/projects/${projectId}/scenes/reorder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scene_ids: sceneIds }),
+  })
 }
