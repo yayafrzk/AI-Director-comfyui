@@ -1,14 +1,19 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { createProject, getProjects } from '../../services/projects'
 import type { Project } from '../../types/project'
 
 const projectQueryKey = ['projects']
+const emptyProjects: Project[] = []
 
-export function ProjectSidebar() {
+type ProjectSidebarProps = {
+  selectedProjectId: string | null
+  onSelectProject: (projectId: string) => void
+}
+
+export function ProjectSidebar({ selectedProjectId, onSelectProject }: ProjectSidebarProps) {
   const queryClient = useQueryClient()
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -17,15 +22,21 @@ export function ProjectSidebar() {
     mutationFn: createProject,
     onSuccess: (project) => {
       queryClient.setQueryData<Project[]>(projectQueryKey, (projects = []) => [...projects, project])
-      setSelectedProjectId(project.id)
+      onSelectProject(project.id)
       setProjectName('')
       setCreateError(null)
       setIsCreating(false)
     },
   })
 
-  const projects = projectsQuery.data ?? []
+  const projects = projectsQuery.data ?? emptyProjects
   const currentProjectId = selectedProjectId ?? projects[0]?.id ?? null
+
+  useEffect(() => {
+    if (selectedProjectId === null && projects[0]) {
+      onSelectProject(projects[0].id)
+    }
+  }, [onSelectProject, projects, selectedProjectId])
 
   function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -86,7 +97,7 @@ export function ProjectSidebar() {
               <li key={project.id}>
                 <button
                   type="button"
-                  onClick={() => setSelectedProjectId(project.id)}
+                  onClick={() => onSelectProject(project.id)}
                   className={[
                     'flex w-full items-center gap-3 border px-3 py-3 text-left',
                     isCurrent
