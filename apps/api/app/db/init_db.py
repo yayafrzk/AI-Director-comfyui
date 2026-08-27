@@ -5,6 +5,7 @@ from sqlalchemy.engine import Engine
 from app.db.base import Base
 from app.db.session import engine
 from app.models.project import Project  # noqa: F401
+from app.models.scene import Scene  # noqa: F401
 
 
 def _ensure_database_parent(database_engine: Engine) -> None:

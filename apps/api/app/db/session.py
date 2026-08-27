@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -17,10 +17,16 @@ def _sqlite_url(database_path: Path) -> str:
 
 def create_engine_for_path(database_path: Path | str | None = None) -> Engine:
     path = Path(database_path or get_database_path()).expanduser().resolve()
-    return create_engine(
+    database_engine = create_engine(
         _sqlite_url(path),
         connect_args={"check_same_thread": False},
     )
+
+    @event.listens_for(database_engine, "connect")
+    def enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    return database_engine
 
 
 engine = create_engine_for_path()

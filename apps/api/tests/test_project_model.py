@@ -22,7 +22,7 @@ def test_project_table_and_model_round_trip(tmp_path) -> None:
 
     try:
         init_db(database_engine)
-        assert inspect(database_engine).get_table_names() == ["projects"]
+        assert set(inspect(database_engine).get_table_names()) == {"projects", "scenes"}
 
         session_factory = create_session_factory(database_engine)
         project = Project(
