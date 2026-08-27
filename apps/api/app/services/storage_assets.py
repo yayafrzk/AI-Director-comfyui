@@ -1,7 +1,7 @@
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -26,8 +26,28 @@ class StoredAssetFile:
     size_bytes: int
 
 
+class AssetPathInvalidError(ValueError):
+    pass
+
+
 def asset_directory(project_id: str, asset_type: str) -> Path:
     return get_settings().app_data_dir / "projects" / project_id / _ASSET_DIRECTORIES[asset_type]
+
+
+def resolve_asset_path(project_id: str, relative_path: str) -> Path:
+    project_root = (get_settings().app_data_dir / "projects" / project_id).resolve()
+    candidate_path = Path(relative_path)
+
+    if candidate_path.is_absolute() or PureWindowsPath(relative_path).is_absolute():
+        raise AssetPathInvalidError("Asset path must be relative")
+
+    resolved_path = (project_root / candidate_path).resolve()
+    try:
+        resolved_path.relative_to(project_root)
+    except ValueError as error:
+        raise AssetPathInvalidError("Asset path escapes project root") from error
+
+    return resolved_path
 
 
 def _safe_extension(filename: str | None) -> str:

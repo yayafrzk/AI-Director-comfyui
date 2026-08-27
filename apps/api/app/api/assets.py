@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,12 @@ from app.models.asset import Asset
 from app.models.project import Project
 from app.models.scene import Scene
 from app.schemas.asset import AssetRead, AssetType
-from app.services.storage_assets import cleanup_asset_file, store_asset_file
+from app.services.storage_assets import (
+    AssetPathInvalidError,
+    cleanup_asset_file,
+    resolve_asset_path,
+    store_asset_file,
+)
 
 
 router = APIRouter(tags=["assets"])
@@ -21,6 +26,10 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
         status_code=status_code,
         content={"data": None, "error": {"code": code, "message": message}},
     )
+
+
+def _asset_not_found() -> JSONResponse:
+    return _error(status.HTTP_404_NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found")
 
 
 @router.post("/projects/{project_id}/assets/upload", response_model=None)
@@ -83,3 +92,28 @@ async def upload_asset(
 
     db.refresh(asset)
     return {"data": AssetRead.model_validate(asset), "error": None}
+
+
+@router.get("/assets/{asset_id}", response_model=None)
+def get_asset(asset_id: str, db: Session = Depends(get_db)) -> dict | JSONResponse:
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        return _asset_not_found()
+    return {"data": AssetRead.model_validate(asset), "error": None}
+
+
+@router.get("/assets/{asset_id}/content", response_model=None)
+def get_asset_content(asset_id: str, db: Session = Depends(get_db)) -> FileResponse | JSONResponse:
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        return _asset_not_found()
+
+    try:
+        file_path = resolve_asset_path(asset.project_id, asset.relative_path)
+    except AssetPathInvalidError:
+        return _error(status.HTTP_400_BAD_REQUEST, "ASSET_FILE_INVALID", "Asset file path is invalid")
+
+    if not file_path.is_file():
+        return _error(status.HTTP_404_NOT_FOUND, "ASSET_FILE_NOT_FOUND", "Asset file not found")
+
+    return FileResponse(file_path, media_type=asset.mime_type or "application/octet-stream")
