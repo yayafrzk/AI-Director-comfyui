@@ -72,6 +72,7 @@ def test_asset_table_orm_round_trip_and_schema_serialization(tmp_path) -> None:
         init_db(database_engine)
         assert set(inspect(database_engine).get_table_names()) == {
             "assets",
+            "generation_jobs",
             "projects",
             "scenes",
             "workflow_templates",

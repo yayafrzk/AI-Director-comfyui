@@ -30,6 +30,7 @@ def test_engine_initialization_creates_database_file(tmp_path) -> None:
     assert database_engine.url.database == database_path.resolve().as_posix()
     assert set(Base.metadata.tables) == {
         "assets",
+        "generation_jobs",
         "projects",
         "scenes",
         "workflow_templates",

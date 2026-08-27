@@ -54,6 +54,7 @@ def test_scene_table_and_model_round_trip(tmp_path) -> None:
         init_db(database_engine)
         assert set(inspect(database_engine).get_table_names()) == {
             "assets",
+            "generation_jobs",
             "projects",
             "scenes",
             "workflow_templates",
