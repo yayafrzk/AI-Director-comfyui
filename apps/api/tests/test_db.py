@@ -28,7 +28,12 @@ def test_engine_initialization_creates_database_file(tmp_path) -> None:
 
     assert database_path.exists()
     assert database_engine.url.database == database_path.resolve().as_posix()
-    assert set(Base.metadata.tables) == {"assets", "projects", "scenes"}
+    assert set(Base.metadata.tables) == {
+        "assets",
+        "projects",
+        "scenes",
+        "workflow_templates",
+    }
     database_engine.dispose()
 
 

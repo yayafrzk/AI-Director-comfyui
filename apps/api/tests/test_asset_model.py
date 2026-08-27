@@ -70,7 +70,12 @@ def test_asset_table_orm_round_trip_and_schema_serialization(tmp_path) -> None:
 
     try:
         init_db(database_engine)
-        assert set(inspect(database_engine).get_table_names()) == {"assets", "projects", "scenes"}
+        assert set(inspect(database_engine).get_table_names()) == {
+            "assets",
+            "projects",
+            "scenes",
+            "workflow_templates",
+        }
 
         session_factory = create_session_factory(database_engine)
         with session_factory() as session:

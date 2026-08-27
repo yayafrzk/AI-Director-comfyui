@@ -52,7 +52,12 @@ def test_scene_table_and_model_round_trip(tmp_path) -> None:
 
     try:
         init_db(database_engine)
-        assert set(inspect(database_engine).get_table_names()) == {"assets", "projects", "scenes"}
+        assert set(inspect(database_engine).get_table_names()) == {
+            "assets",
+            "projects",
+            "scenes",
+            "workflow_templates",
+        }
 
         session_factory = create_session_factory(database_engine)
         with session_factory() as session:
