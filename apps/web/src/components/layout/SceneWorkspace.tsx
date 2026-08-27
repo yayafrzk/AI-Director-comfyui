@@ -4,6 +4,7 @@ import { useRef, useState, type DragEvent } from 'react'
 import { getProjectScenes, reorderScenes } from '../../services/scenes'
 import type { Scene } from '../../types/scene'
 import { SceneCard } from './SceneCard'
+import { SceneDetailDrawer } from './SceneDetailDrawer'
 
 type SceneWorkspaceProps = {
   projectId: string | null
@@ -45,6 +46,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   const reorderLockRef = useRef(false)
   const [draggingSceneId, setDraggingSceneId] = useState<string | null>(null)
   const [reorderError, setReorderError] = useState<{ projectId: string; message: string } | null>(null)
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
 
   const scenesQuery = useQuery({
     queryKey: sceneQueryKey(projectId),
@@ -52,6 +54,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
     enabled: projectId !== null,
   })
   const scenes = scenesQuery.data ?? []
+  const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
   const reorderMutation = useMutation({
     mutationFn: ({ projectId: reorderProjectId, sceneIds }: ReorderVariables) => reorderScenes(reorderProjectId, sceneIds),
     onSuccess: (reorderedScenes, variables) => {
@@ -195,9 +198,14 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
               onDragStart={handleDragStart}
               onDragEnter={handleDragEnter}
               onDragEnd={handleDragEnd}
+              onOpen={setSelectedSceneId}
             />
           ))}
         </section>
+      ) : null}
+
+      {projectId !== null && selectedScene !== null ? (
+        <SceneDetailDrawer key={selectedScene.id} projectId={projectId} scene={selectedScene} onClose={() => setSelectedSceneId(null)} />
       ) : null}
     </main>
   )

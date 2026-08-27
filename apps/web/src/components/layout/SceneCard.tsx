@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react'
+import type { DragEvent, MouseEvent } from 'react'
 
 import type { Scene } from '../../types/scene'
 
@@ -10,15 +10,17 @@ type SceneCardProps = {
   onDragStart: (event: DragEvent<HTMLButtonElement>, sceneId: string) => void
   onDragEnter: (sceneId: string) => void
   onDragEnd: () => void
+  onOpen: (sceneId: string) => void
 }
 
-export function SceneCard({ scene, position, isSorting, dragDisabled, onDragStart, onDragEnter, onDragEnd }: SceneCardProps) {
+export function SceneCard({ scene, position, isSorting, dragDisabled, onDragStart, onDragEnter, onDragEnd, onOpen }: SceneCardProps) {
   const title = scene.title.trim() || '未命名分镜'
   const prompt = scene.prompt?.trim() || '暂无 Prompt'
   const sceneNumber = isSorting ? position + 1 : scene.scene_number
 
   return (
     <article
+      onClick={() => onOpen(scene.id)}
       onDragEnter={() => onDragEnter(scene.id)}
       onDragOver={(event) => event.preventDefault()}
       className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-4 sm:p-5"
@@ -30,6 +32,7 @@ export function SceneCard({ scene, position, isSorting, dragDisabled, onDragStar
           disabled={dragDisabled}
           onDragStart={(event) => onDragStart(event, scene.id)}
           onDragEnd={onDragEnd}
+          onClick={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()}
           aria-label={`拖动分镜 ${sceneNumber} 排序`}
           className="grid size-7 shrink-0 cursor-grab place-items-center border border-[color:var(--border-subtle)] font-mono text-sm text-[color:var(--text-muted)] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
         >

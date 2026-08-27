@@ -1,4 +1,4 @@
-import type { Scene } from '../types/scene'
+import type { Scene, SceneUpdate } from '../types/scene'
 
 type ApiError = {
   code: string
@@ -30,5 +30,13 @@ export function reorderScenes(projectId: string, sceneIds: string[]): Promise<Sc
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scene_ids: sceneIds }),
+  })
+}
+
+export function updateScene(sceneId: string, sceneUpdate: SceneUpdate): Promise<Scene> {
+  return request<Scene>(`/api/v1/scenes/${sceneId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sceneUpdate),
   })
 }
