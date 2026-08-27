@@ -26,12 +26,28 @@ class StoredAssetFile:
     size_bytes: int
 
 
+@dataclass(frozen=True)
+class StoredThumbnailFile:
+    relative_path: str
+    path: Path
+
+
 class AssetPathInvalidError(ValueError):
     pass
 
 
 def asset_directory(project_id: str, asset_type: str) -> Path:
     return get_settings().app_data_dir / "projects" / project_id / _ASSET_DIRECTORIES[asset_type]
+
+
+def create_thumbnail_file(project_id: str) -> StoredThumbnailFile:
+    directory = get_settings().app_data_dir / "projects" / project_id / "thumbnails"
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid4().hex}.jpg"
+    return StoredThumbnailFile(
+        relative_path=f"thumbnails/{filename}",
+        path=directory / filename,
+    )
 
 
 def resolve_asset_path(project_id: str, relative_path: str) -> Path:

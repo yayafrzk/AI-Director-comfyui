@@ -19,8 +19,14 @@ from app.services.media_metadata import (
 from app.services.storage_assets import (
     AssetPathInvalidError,
     cleanup_asset_file,
+    create_thumbnail_file,
     resolve_asset_path,
     store_asset_file,
+)
+from app.services.media_thumbnail import (
+    FFmpegNotFoundError,
+    VideoThumbnailError,
+    generate_video_thumbnail,
 )
 
 
@@ -74,6 +80,7 @@ async def upload_asset(
     width: int | None = None
     height: int | None = None
     duration_seconds: float | None = None
+    stored_thumbnail = None
     if type == "video":
         try:
             metadata = probe_video_metadata(stored_file.path)
@@ -104,6 +111,41 @@ async def upload_asset(
         width = metadata.width
         height = metadata.height
         duration_seconds = metadata.duration_seconds
+        try:
+            stored_thumbnail = create_thumbnail_file(project_id)
+            generate_video_thumbnail(
+                stored_file.path,
+                stored_thumbnail.path,
+                duration_seconds,
+            )
+        except FFmpegNotFoundError:
+            cleanup_asset_file(stored_file.path)
+            if stored_thumbnail is not None:
+                cleanup_asset_file(stored_thumbnail.path)
+            _logger.error(
+                "Video asset upload failed: category=ffmpeg_not_found project_id=%s scene_id=%s",
+                project_id,
+                scene_id,
+            )
+            return _error(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "FFMPEG_NOT_FOUND",
+                "ffmpeg is not available",
+            )
+        except (VideoThumbnailError, OSError):
+            cleanup_asset_file(stored_file.path)
+            if stored_thumbnail is not None:
+                cleanup_asset_file(stored_thumbnail.path)
+            _logger.warning(
+                "Video asset upload failed: category=thumbnail_failed project_id=%s scene_id=%s",
+                project_id,
+                scene_id,
+            )
+            return _error(
+                status.HTTP_400_BAD_REQUEST,
+                "ASSET_THUMBNAIL_FAILED",
+                "Unable to generate video thumbnail",
+            )
 
     asset = Asset(
         project_id=project_id,
@@ -111,7 +153,7 @@ async def upload_asset(
         type=type,
         role=role,
         relative_path=stored_file.relative_path,
-        thumbnail_path=None,
+        thumbnail_path=stored_thumbnail.relative_path if stored_thumbnail is not None else None,
         mime_type=file.content_type or "application/octet-stream",
         width=width,
         height=height,
@@ -125,6 +167,8 @@ async def upload_asset(
     except SQLAlchemyError:
         db.rollback()
         cleanup_asset_file(stored_file.path)
+        if stored_thumbnail is not None:
+            cleanup_asset_file(stored_thumbnail.path)
         return _error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "ASSET_UPLOAD_FAILED",

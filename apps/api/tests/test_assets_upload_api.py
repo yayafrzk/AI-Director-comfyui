@@ -13,6 +13,7 @@ from app.models.asset import Asset
 from app.models.project import Project
 from app.models.scene import Scene
 from app.services.media_metadata import FFprobeNotFoundError, VideoMetadata, VideoMetadataProbeError
+from app.services.media_thumbnail import FFmpegNotFoundError, VideoThumbnailError
 
 
 @pytest.fixture
@@ -30,7 +31,12 @@ def api(tmp_path, monkeypatch):
         finally:
             session.close()
 
-    def request(method: str, path: str, data: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> httpx.Response:
+    def request(
+        method: str,
+        path: str,
+        data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> httpx.Response:
         async def send() -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -219,7 +225,12 @@ def test_upload_video_persists_ffprobe_metadata(api, monkeypatch) -> None:
         assert path.is_file()
         return VideoMetadata(width=1920, height=1080, duration_seconds=5.0)
 
+    def generate_thumbnail(_video_path: Path, output_path: Path, duration_seconds: float) -> None:
+        assert duration_seconds == 5.0
+        output_path.write_bytes(b"jpeg")
+
     monkeypatch.setattr("app.api.assets.probe_video_metadata", probe)
+    monkeypatch.setattr("app.api.assets.generate_video_thumbnail", generate_thumbnail)
     response = _upload(
         request,
         project.id,
@@ -234,7 +245,11 @@ def test_upload_video_persists_ffprobe_metadata(api, monkeypatch) -> None:
     asset = response.json()["data"]
     assert (asset["width"], asset["height"], asset["duration_seconds"]) == (1920, 1080, 5.0)
     assert asset["relative_path"].startswith("videos/")
+    assert asset["thumbnail_path"].startswith("thumbnails/")
     assert probed_paths == [app_data_dir / "projects" / project.id / asset["relative_path"]]
+    assert (app_data_dir / "projects" / project.id / asset["thumbnail_path"]).read_bytes() == b"jpeg"
+    metadata_response = request("GET", f"/api/v1/assets/{asset['id']}")
+    assert metadata_response.json()["data"]["thumbnail_path"] == asset["thumbnail_path"]
     with session_factory() as session:
         persisted = session.get(Asset, asset["id"])
         assert persisted is not None
@@ -260,6 +275,56 @@ def test_upload_video_probe_failure_removes_files_and_does_not_create_asset(api,
         assert session.query(Asset).count() == 0
 
 
+@pytest.mark.parametrize("error", [VideoThumbnailError("failed"), FFmpegNotFoundError("missing")])
+def test_upload_thumbnail_failure_removes_video_and_thumbnail(api, monkeypatch, error) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory, "Thumbnail failure project")
+    monkeypatch.setattr(
+        "app.api.assets.probe_video_metadata",
+        lambda _path: VideoMetadata(width=1920, height=1080, duration_seconds=5.0),
+    )
+
+    def fail_thumbnail(_video_path: Path, output_path: Path, _duration_seconds: float) -> None:
+        output_path.write_bytes(b"partial")
+        raise error
+
+    monkeypatch.setattr("app.api.assets.generate_video_thumbnail", fail_thumbnail)
+    response = _upload(request, project.id, filename="invalid.mp4", content_type="video/mp4", type="video", role="source_video")
+
+    is_missing = isinstance(error, FFmpegNotFoundError)
+    assert response.status_code == (503 if is_missing else 400)
+    assert response.json()["error"]["code"] == ("FFMPEG_NOT_FOUND" if is_missing else "ASSET_THUMBNAIL_FAILED")
+    project_directory = app_data_dir / "projects" / project.id
+    assert list((project_directory / "videos").glob("*")) == []
+    assert list((project_directory / "thumbnails").glob("*")) == []
+    with session_factory() as session:
+        assert session.query(Asset).count() == 0
+
+
+def test_upload_video_commit_failure_removes_video_and_thumbnail(api, monkeypatch) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory, "Video commit failure project")
+    monkeypatch.setattr(
+        "app.api.assets.probe_video_metadata",
+        lambda _path: VideoMetadata(width=1920, height=1080, duration_seconds=5.0),
+    )
+    monkeypatch.setattr(
+        "app.api.assets.generate_video_thumbnail",
+        lambda _video_path, output_path, _duration: output_path.write_bytes(b"jpeg"),
+    )
+
+    def fail_commit(_self) -> None:
+        raise SQLAlchemyError("commit failed")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response = _upload(request, project.id, filename="clip.mp4", content_type="video/mp4", type="video", role="source_video")
+
+    assert response.status_code == 500
+    project_directory = app_data_dir / "projects" / project.id
+    assert list((project_directory / "videos").glob("*")) == []
+    assert list((project_directory / "thumbnails").glob("*")) == []
+
+
 @pytest.mark.parametrize("asset_type", ["image", "audio", "reference"])
 def test_upload_non_video_does_not_probe_metadata(api, monkeypatch, asset_type: str) -> None:
     request, session_factory, _app_data_dir = api
@@ -268,9 +333,14 @@ def test_upload_non_video_does_not_probe_metadata(api, monkeypatch, asset_type: 
     def unexpected_probe(_path: Path) -> VideoMetadata:
         raise AssertionError("non-video uploads must not call ffprobe")
 
+    def unexpected_thumbnail(_video_path: Path, _output_path: Path, _duration_seconds: float) -> None:
+        raise AssertionError("non-video uploads must not generate thumbnails")
+
     monkeypatch.setattr("app.api.assets.probe_video_metadata", unexpected_probe)
+    monkeypatch.setattr("app.api.assets.generate_video_thumbnail", unexpected_thumbnail)
     response = _upload(request, project.id, type=asset_type, role="upload")
 
     assert response.status_code == 200
     asset = response.json()["data"]
     assert (asset["width"], asset["height"], asset["duration_seconds"]) == (None, None, None)
+    assert asset["thumbnail_path"] is None
