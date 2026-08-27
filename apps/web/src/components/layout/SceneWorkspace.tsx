@@ -1,7 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type DragEvent } from 'react'
 
-import { getProjectScenes, reorderScenes } from '../../services/scenes'
+import { generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes } from '../../services/scenes'
+import { generationJobsKey, useGenerationEvents } from '../../hooks/useGenerationEvents'
+import type { GenerationJob } from '../../types/generation'
 import type { Scene } from '../../types/scene'
 import { SceneCard } from './SceneCard'
 import { SceneDetailDrawer } from './SceneDetailDrawer'
@@ -54,6 +56,9 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
     enabled: projectId !== null,
   })
   const scenes = scenesQuery.data ?? []
+  useGenerationEvents(projectId !== null)
+  const generationQueries = useQueries({ queries: scenes.map((scene) => ({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })) })
+  const jobsByScene = new Map(scenes.map((scene, index) => [scene.id, generationQueries[index]?.data?.[0]]))
   const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
   const reorderMutation = useMutation({
     mutationFn: ({ projectId: reorderProjectId, sceneIds }: ReorderVariables) => reorderScenes(reorderProjectId, sceneIds),
@@ -72,6 +77,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
       reorderLockRef.current = false
     },
   })
+  const generateMutation = useMutation({ mutationFn: (scene: Scene) => generateScene(scene.id, scene.workflow_template_id!), onSuccess: (submitted, scene) => queryClient.setQueryData<GenerationJob[]>(generationJobsKey(scene.id), (jobs = []) => [{ id: submitted.job_id, scene_id: scene.id, status: submitted.status }, ...jobs]) })
   const isSorting = draggingSceneId !== null || reorderMutation.isPending
   const dragDisabled = scenes.length < 2 || reorderMutation.isPending
 
@@ -192,6 +198,9 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
             <SceneCard
               key={scene.id}
               scene={scene}
+              generationJob={jobsByScene.get(scene.id)}
+              generating={generateMutation.isPending && generateMutation.variables?.id === scene.id}
+              onGenerate={(target) => generateMutation.mutate(target)}
               position={index}
               isSorting={isSorting}
               dragDisabled={dragDisabled}

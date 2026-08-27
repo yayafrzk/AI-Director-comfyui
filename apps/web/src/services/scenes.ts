@@ -1,3 +1,4 @@
+import type { GenerationJob, GenerationStatus } from '../types/generation'
 import type { Scene, SceneUpdate } from '../types/scene'
 
 type ApiError = {
@@ -38,5 +39,19 @@ export function updateScene(sceneId: string, sceneUpdate: SceneUpdate): Promise<
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sceneUpdate),
+  })
+}
+
+export type GenerationSubmit = { job_id: string; status: GenerationStatus }
+
+export function getSceneGenerationJobs(sceneId: string): Promise<GenerationJob[]> {
+  return request<GenerationJob[]>(`/api/v1/scenes/${sceneId}/generation-jobs`)
+}
+
+export function generateScene(sceneId: string, workflowTemplateId: string): Promise<GenerationSubmit> {
+  return request<GenerationSubmit>(`/api/v1/scenes/${sceneId}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow_template_id: workflowTemplateId, params: {} }),
   })
 }

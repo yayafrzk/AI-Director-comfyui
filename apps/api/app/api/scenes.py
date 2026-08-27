@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.project import Project
+from app.models.generation_job import GenerationJob
 from app.models.workflow_template import WorkflowTemplate
 from app.models.scene import Scene
 from app.schemas.generation import GenerationRequest, GenerationSubmitRead
+from app.schemas.generation_job import GenerationJobRead
 from app.schemas.scene import SceneCreate, SceneRead, SceneReorderRequest, SceneUpdate
 from app.services.generation_service import GenerationServiceError, submit_generation
 
@@ -217,3 +219,13 @@ async def generate_scene(
     except GenerationServiceError as error:
         return JSONResponse(status_code=error.status_code, content={"data": None, "error": {"code": error.code, "message": str(error)}})
     return {"data": GenerationSubmitRead(job_id=job.id, status="queued"), "error": None}
+@router.get("/scenes/{scene_id}/generation-jobs", response_model=None)
+def list_scene_generation_jobs(scene_id: str, db: Session = Depends(get_db)) -> dict | JSONResponse:
+    if db.get(Scene, scene_id) is None:
+        return _scene_not_found()
+    jobs = db.scalars(
+        select(GenerationJob)
+        .where(GenerationJob.scene_id == scene_id)
+        .order_by(GenerationJob.created_at.desc())
+    ).all()
+    return {"data": [GenerationJobRead.model_validate(job) for job in jobs], "error": None}
