@@ -41,3 +41,6 @@ class SceneRead(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+class SceneReorderRequest(BaseModel):
+    scene_ids: list[str]

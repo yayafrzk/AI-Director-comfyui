@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.scene import Scene
-from app.schemas.scene import SceneCreate, SceneRead, SceneUpdate
+from app.schemas.scene import SceneCreate, SceneRead, SceneReorderRequest, SceneUpdate
 
 
 router = APIRouter(tags=["scenes"])
@@ -21,6 +21,19 @@ def _project_not_found() -> JSONResponse:
             "error": {
                 "code": "PROJECT_NOT_FOUND",
                 "message": "Project not found",
+            },
+        },
+    )
+
+
+def _scene_reorder_invalid(message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "data": None,
+            "error": {
+                "code": "SCENE_REORDER_INVALID",
+                "message": message,
             },
         },
     )
@@ -132,3 +145,52 @@ def delete_scene(scene_id: str, db: Session = Depends(get_db)) -> dict | JSONRes
         db.rollback()
         raise
     return {"data": {"id": scene_id}, "error": None}
+
+
+@router.post("/projects/{project_id}/scenes/reorder", response_model=None)
+def reorder_project_scenes(
+    project_id: str,
+    reorder_request: SceneReorderRequest,
+    db: Session = Depends(get_db),
+) -> dict | JSONResponse:
+    if db.get(Project, project_id) is None:
+        return _project_not_found()
+
+    scenes = db.scalars(
+        select(Scene)
+        .where(Scene.project_id == project_id)
+        .order_by(Scene.scene_number)
+    ).all()
+    scene_ids = reorder_request.scene_ids
+    existing_scene_ids = {scene.id for scene in scenes}
+
+    if len(scene_ids) != len(set(scene_ids)):
+        return _scene_reorder_invalid("scene_ids must not contain duplicates")
+    if set(scene_ids) != existing_scene_ids:
+        return _scene_reorder_invalid(
+            "scene_ids must contain every Scene in the Project exactly once"
+        )
+
+    ordered_scenes = {scene.id: scene for scene in scenes}
+    temporary_base = max(
+        (scene.scene_number for scene in scenes),
+        default=0,
+    ) + len(scenes) + 1
+
+    try:
+        for index, scene_id in enumerate(scene_ids):
+            ordered_scenes[scene_id].scene_number = temporary_base + index
+        db.flush()
+
+        for index, scene_id in enumerate(scene_ids, start=1):
+            ordered_scenes[scene_id].scene_number = index
+        db.flush()
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+
+    return {
+        "data": [SceneRead.model_validate(ordered_scenes[scene_id]) for scene_id in scene_ids],
+        "error": None,
+    }

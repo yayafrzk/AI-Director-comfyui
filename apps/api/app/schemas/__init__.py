@@ -1,5 +1,5 @@
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
-from app.schemas.scene import SceneCreate, SceneRead, SceneUpdate
+from app.schemas.scene import SceneCreate, SceneRead, SceneReorderRequest, SceneUpdate
 
 __all__ = [
     "ProjectCreate",
@@ -7,5 +7,6 @@ __all__ = [
     "ProjectUpdate",
     "SceneCreate",
     "SceneRead",
+    "SceneReorderRequest",
     "SceneUpdate",
 ]
