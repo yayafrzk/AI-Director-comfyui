@@ -9,6 +9,8 @@ def _clear_config_environment(monkeypatch) -> None:
         "app_data_dir",
         "COMFYUI_BASE_URL",
         "comfyui_base_url",
+        "WORKFLOWS_DIR",
+        "workflows_dir",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -22,14 +24,19 @@ def test_default_settings(monkeypatch) -> None:
     assert settings.app_data_dir == expected_data_dir
     assert settings.app_data_dir.is_absolute()
     assert settings.comfyui_base_url == "http://127.0.0.1:8188"
+    assert settings.workflows_dir == Path(__file__).resolve().parents[3] / "workflows"
+    assert settings.workflows_dir.is_absolute()
 
 
 def test_environment_variables_override_defaults(monkeypatch, tmp_path) -> None:
     custom_data_dir = tmp_path / "custom-data"
     monkeypatch.setenv("APP_DATA_DIR", str(custom_data_dir))
     monkeypatch.setenv("COMFYUI_BASE_URL", "http://127.0.0.1:9999")
+    workflows_dir = tmp_path / "custom-workflows"
+    monkeypatch.setenv("WORKFLOWS_DIR", str(workflows_dir))
 
     settings = Settings()
 
     assert settings.app_data_dir == custom_data_dir
     assert settings.comfyui_base_url == "http://127.0.0.1:9999"
+    assert settings.workflows_dir == workflows_dir
