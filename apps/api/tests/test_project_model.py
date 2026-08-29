@@ -25,6 +25,7 @@ def test_project_table_and_model_round_trip(tmp_path) -> None:
         assert set(inspect(database_engine).get_table_names()) == {
             "assets",
             "generation_jobs",
+            "generation_outputs",
             "projects",
             "scenes",
             "workflow_templates",

@@ -1,12 +1,15 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import BigInteger, JSON, ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.project import UTCDateTime, _utc_now
+
+if TYPE_CHECKING:
+    from app.models.generation_output import GenerationOutput
 
 
 class GenerationJob(Base):
@@ -43,6 +46,8 @@ class GenerationJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    outputs: Mapped[list["GenerationOutput"]] = relationship(back_populates="job")
+
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),
         default=_utc_now,

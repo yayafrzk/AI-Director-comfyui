@@ -8,6 +8,7 @@ from sqlalchemy import inspect, select
 from app.db.init_db import init_db
 from app.db.session import create_engine_for_path, create_session_factory
 from app.models.generation_job import GenerationJob
+from app.models.generation_output import GenerationOutput
 from app.models.project import Project
 from app.models.scene import Scene
 from app.models.workflow_template import WorkflowTemplate
@@ -91,7 +92,7 @@ def test_generation_job_orm_round_trip_snapshots_and_schema(tmp_path) -> None:
         init_db(database_engine)
         table_names = set(inspect(database_engine).get_table_names())
         assert "generation_jobs" in table_names
-        assert "generation_outputs" not in table_names
+        assert "generation_outputs" in table_names
 
         session_factory = create_session_factory(database_engine)
         with session_factory() as session:
@@ -218,3 +219,30 @@ def test_generation_job_create_schema_rejects_invalid_values(overrides: dict[str
 
     with pytest.raises(ValidationError):
         GenerationJobCreate(**values)
+
+
+def test_generation_outputs_relations_and_unique_indexes(tmp_path) -> None:
+    engine = create_engine_for_path(tmp_path / "outputs.db")
+    try:
+        init_db(engine)
+        inspector = inspect(engine)
+        columns = {column["name"] for column in inspector.get_columns("generation_outputs")}
+        assert {"id", "generation_job_id", "asset_id", "output_index"} <= columns
+        foreign_keys = {(key["constrained_columns"][0], key["referred_table"]) for key in inspector.get_foreign_keys("generation_outputs")}
+        assert ("generation_job_id", "generation_jobs") in foreign_keys
+        assert ("asset_id", "assets") in foreign_keys
+        factory = create_session_factory(engine)
+        with factory() as session:
+            project, scene, workflow = _create_dependencies(session)
+            first_job, second_job = _job(project.id, scene.id, workflow.id), _job(project.id, scene.id, workflow.id)
+            from app.models.asset import Asset
+            assets = [Asset(project_id=project.id, scene_id=scene.id, type="video", role="output", relative_path=f"videos/{index}.mp4", thumbnail_path=None, mime_type="video/mp4", width=None, height=None, duration_seconds=None, size_bytes=1, hash=None) for index in range(3)]
+            session.add_all([first_job, second_job, *assets]); session.commit()
+            outputs = [GenerationOutput(generation_job_id=first_job.id, asset_id=assets[0].id, output_index=0), GenerationOutput(generation_job_id=first_job.id, asset_id=assets[1].id, output_index=1), GenerationOutput(generation_job_id=second_job.id, asset_id=assets[2].id, output_index=0)]
+            session.add_all(outputs); session.commit()
+            assert [output.output_index for output in first_job.outputs] == [0, 1]
+            assert outputs[0].asset.id == assets[0].id
+            session.add(GenerationOutput(generation_job_id=first_job.id, asset_id=assets[2].id, output_index=0))
+            with pytest.raises(Exception): session.commit()
+    finally:
+        engine.dispose()

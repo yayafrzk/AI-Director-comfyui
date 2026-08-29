@@ -1,11 +1,15 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.project import UTCDateTime, _utc_now
+
+if TYPE_CHECKING:
+    from app.models.generation_output import GenerationOutput
 
 
 class Asset(Base):
@@ -36,6 +40,8 @@ class Asset(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    generation_outputs: Mapped[list["GenerationOutput"]] = relationship(back_populates="asset")
+
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),
         default=_utc_now,

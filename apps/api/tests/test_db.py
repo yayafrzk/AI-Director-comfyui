@@ -31,6 +31,7 @@ def test_engine_initialization_creates_database_file(tmp_path) -> None:
     assert set(Base.metadata.tables) == {
         "assets",
         "generation_jobs",
+            "generation_outputs",
         "projects",
         "scenes",
         "workflow_templates",

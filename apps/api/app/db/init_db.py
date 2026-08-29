@@ -6,6 +6,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.models.asset import Asset  # noqa: F401
 from app.models.generation_job import GenerationJob  # noqa: F401
+from app.models.generation_output import GenerationOutput  # noqa: F401
 from app.models.project import Project  # noqa: F401
 from app.models.scene import Scene  # noqa: F401
 from app.models.workflow_template import WorkflowTemplate  # noqa: F401
