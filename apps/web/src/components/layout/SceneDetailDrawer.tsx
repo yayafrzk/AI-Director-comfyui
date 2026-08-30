@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import { getSceneGenerationJobs, updateScene } from '../../services/scenes'
+import { getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
 import { generationJobsKey } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
 import type { Scene, SceneUpdate } from '../../types/scene'
@@ -65,6 +65,14 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
+  const selectAssetMutation = useMutation({
+    mutationFn: (assetId: string) => selectSceneAsset(scene.id, assetId),
+    onSuccess: (updatedScene) => {
+      queryClient.setQueryData<Scene[]>(sceneQueryKey(projectId), (scenes = []) =>
+        scenes.map((currentScene) => (currentScene.id === updatedScene.id ? updatedScene : currentScene)),
+      )
+    },
+  })
   const saveMutation = useMutation({
     mutationFn: (sceneUpdate: SceneUpdate) => updateScene(scene.id, sceneUpdate),
     onSuccess: (updatedScene) => {
@@ -243,14 +251,35 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               {!historyQuery.isLoading && !historyQuery.isError && historyQuery.data?.length === 0 ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">暂无生成历史</p> : null}
               <div className="mt-3 space-y-3">
                 {createHistoryEntries(historyQuery.data).map(({ job, output, version }) => (
-                  <div key={output.id} className="border border-[color:var(--border-subtle)] p-3">
-                    <p className="text-sm">Version {version} · {output.asset.type}</p>
+                  <div
+                    key={output.id}
+                    className={`border p-3 ${output.asset.id === scene.selected_asset_id ? 'border-[color:var(--accent)] bg-[var(--accent-soft)]' : 'border-[color:var(--border-subtle)]'}`}
+                  >
+                    <p className="text-sm">
+                      Version {version} · {output.asset.type}
+                      {output.asset.id === scene.selected_asset_id ? <span className="ml-2 text-[color:var(--accent)]">★ 已选中</span> : null}
+                    </p>
                     {output.asset.type === 'image' ? (
                       <img className="mt-2 max-h-40 w-full object-contain" src={`/api/v1/assets/${output.asset.id}/content`} alt={`Version ${version}`} />
                     ) : (
                       <video className="mt-2 max-h-40 w-full" controls preload="metadata" src={`/api/v1/assets/${output.asset.id}/content`} />
                     )}
                     <p className="mt-2 text-xs text-[color:var(--text-muted)]">Job {job.status}</p>
+                    {output.asset.id === scene.selected_asset_id ? (
+                      <p className="mt-3 text-sm text-[color:var(--accent)]">已选中</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => selectAssetMutation.mutate(output.asset.id)}
+                        disabled={selectAssetMutation.isPending}
+                        className="mt-3 border border-[color:var(--accent)] px-3 py-1.5 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {selectAssetMutation.isPending && selectAssetMutation.variables === output.asset.id ? '设置中...' : '设为最终版本'}
+                      </button>
+                    )}
+                    {selectAssetMutation.isError && selectAssetMutation.variables === output.asset.id ? (
+                      <p className="mt-2 text-xs text-[color:var(--status-offline)]">设置最终版本失败</p>
+                    ) : null}
                   </div>
                 ))}
               </div>

@@ -48,6 +48,12 @@ export function getSceneGenerationJobs(sceneId: string): Promise<GenerationJob[]
   return request<GenerationJob[]>(`/api/v1/scenes/${sceneId}/generation-jobs`)
 }
 
+export function selectSceneAsset(sceneId: string, assetId: string): Promise<Scene> {
+  return request<Scene>(`/api/v1/scenes/${sceneId}/assets/${assetId}/select`, {
+    method: 'POST',
+  })
+}
+
 export function generateScene(sceneId: string, workflowTemplateId: string): Promise<GenerationSubmit> {
   return request<GenerationSubmit>(`/api/v1/scenes/${sceneId}/generate`, {
     method: 'POST',

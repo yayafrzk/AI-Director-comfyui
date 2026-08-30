@@ -2,15 +2,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.asset import Asset
+from app.models.generation_job import GenerationJob
+from app.models.generation_output import GenerationOutput
 from app.models.project import Project
 from app.models.scene import Scene
 from app.schemas.asset import AssetRead, AssetType
+from app.schemas.scene import SceneRead
 from app.services.media_metadata import (
     FFprobeNotFoundError,
     VideoMetadataProbeError,
@@ -43,6 +47,53 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 def _asset_not_found() -> JSONResponse:
     return _error(status.HTTP_404_NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found")
+
+
+@router.post("/scenes/{scene_id}/assets/{asset_id}/select", response_model=None)
+def select_scene_asset(
+    scene_id: str,
+    asset_id: str,
+    db: Session = Depends(get_db),
+) -> dict | JSONResponse:
+    scene = db.get(Scene, scene_id)
+    if scene is None:
+        return _error(status.HTTP_404_NOT_FOUND, "SCENE_NOT_FOUND", "Scene not found")
+
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        return _asset_not_found()
+    if asset.scene_id != scene.id:
+        return _error(status.HTTP_400_BAD_REQUEST, "ASSET_NOT_IN_SCENE", "Asset does not belong to Scene")
+    if asset.role != "output":
+        return _error(
+            status.HTTP_400_BAD_REQUEST,
+            "ASSET_NOT_GENERATION_OUTPUT",
+            "Asset is not a generation output",
+        )
+
+    generation_output_id = db.scalar(
+        select(GenerationOutput.id)
+        .join(GenerationJob, GenerationOutput.generation_job_id == GenerationJob.id)
+        .where(
+            GenerationOutput.asset_id == asset.id,
+            GenerationJob.scene_id == scene.id,
+        )
+    )
+    if generation_output_id is None:
+        return _error(
+            status.HTTP_400_BAD_REQUEST,
+            "ASSET_NOT_GENERATION_OUTPUT",
+            "Asset is not a generation output",
+        )
+
+    scene.selected_asset_id = asset.id
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+    db.refresh(scene)
+    return {"data": SceneRead.model_validate(scene), "error": None}
 
 
 @router.post("/projects/{project_id}/assets/upload", response_model=None)
