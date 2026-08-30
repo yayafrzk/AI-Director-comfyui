@@ -44,6 +44,27 @@ class GenerationJobCreate(GenerationJobBase):
     workflow_template_id: str
 
 
+class GenerationOutputAssetRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    type: str
+    role: str
+    thumbnail_path: str | None
+    mime_type: str
+    relative_path: str
+    width: int | None
+    height: int | None
+    duration_seconds: float | None
+    created_at: datetime
+
+
+class GenerationOutputRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    output_index: int
+    asset: GenerationOutputAssetRead
+
+
 class GenerationJobRead(GenerationJobBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,3 +78,4 @@ class GenerationJobRead(GenerationJobBase):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+    outputs: list[GenerationOutputRead] = Field(default_factory=list)

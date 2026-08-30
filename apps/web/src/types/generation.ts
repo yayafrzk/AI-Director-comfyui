@@ -8,7 +8,14 @@ export type GenerationJob = {
   error_message?: string | null
   progress?: number
   node_id?: string
+  created_at?: string
+  prompt_snapshot?: string
+  seed?: number | null
+  workflow_version?: string
+  outputs?: GenerationOutput[]
 }
+
+export type GenerationOutput = { id: string; output_index: number; asset: { id: string; type: string; role: string; thumbnail_path: string | null; mime_type: string; relative_path: string; width: number | null; height: number | null; duration_seconds: number | null; created_at: string } }
 
 export type GenerationEvent = {
   type: 'generation.progress' | 'generation.running' | 'generation.completed' | 'generation.failed' | 'generation.cancelled'

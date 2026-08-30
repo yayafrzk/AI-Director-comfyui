@@ -10,7 +10,7 @@ from app.models.generation_job import GenerationJob
 from app.models.workflow_template import WorkflowTemplate
 from app.models.scene import Scene
 from app.schemas.generation import GenerationRequest, GenerationSubmitRead
-from app.schemas.generation_job import GenerationJobRead
+from app.schemas.generation_job import GenerationJobRead, GenerationOutputRead
 from app.schemas.scene import SceneCreate, SceneRead, SceneReorderRequest, SceneUpdate
 from app.services.generation_service import GenerationServiceError, submit_generation
 
@@ -228,4 +228,4 @@ def list_scene_generation_jobs(scene_id: str, db: Session = Depends(get_db)) -> 
         .where(GenerationJob.scene_id == scene_id)
         .order_by(GenerationJob.created_at.desc())
     ).all()
-    return {"data": [GenerationJobRead.model_validate(job) for job in jobs], "error": None}
+    return {"data": [GenerationJobRead.model_validate(job).model_copy(update={"outputs": [GenerationOutputRead.model_validate(output) for output in sorted(job.outputs, key=lambda output: output.output_index)]}) for job in jobs], "error": None}

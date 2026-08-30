@@ -26,6 +26,10 @@ export function useGenerationEvents(enabled: boolean): void {
         if (typeof message.data !== 'string') return
         const event = parseGenerationEvent(message.data)
         if (!event) return
+        if (event.type === 'generation.completed') {
+          void queryClient.invalidateQueries({ queryKey: generationJobsKey(event.scene_id) })
+          return
+        }
         queryClient.setQueryData<GenerationJob[]>(generationJobsKey(event.scene_id), (jobs = []) =>
           jobs.map((job) => job.id === event.job_id ? { ...job, status: event.status, progress: event.progress ?? job.progress, node_id: event.node_id ?? job.node_id, error_code: event.error_code ?? job.error_code, error_message: event.message ?? job.error_message } : job),
         )

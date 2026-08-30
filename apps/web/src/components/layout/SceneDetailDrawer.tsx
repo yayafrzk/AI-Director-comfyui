@@ -1,7 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import { updateScene } from '../../services/scenes'
+import { getSceneGenerationJobs, updateScene } from '../../services/scenes'
+import { generationJobsKey } from '../../hooks/useGenerationEvents'
+import type { GenerationJob } from '../../types/generation'
 import type { Scene, SceneUpdate } from '../../types/scene'
 
 type SceneDetailDrawerProps = {
@@ -34,11 +36,35 @@ function createDraft(scene: Scene): SceneDraft {
   }
 }
 
+type HistoryEntry = {
+  job: GenerationJob
+  output: NonNullable<GenerationJob['outputs']>[number]
+  version: number
+}
+
+function createHistoryEntries(jobs: GenerationJob[] | undefined): HistoryEntry[] {
+  const chronologicalJobs = [...(jobs ?? [])].sort((left, right) =>
+    (left.created_at ?? '').localeCompare(right.created_at ?? '') || left.id.localeCompare(right.id),
+  )
+  const versions = new Map(
+    chronologicalJobs
+      .flatMap((job) => [...(job.outputs ?? [])].sort((left, right) => left.output_index - right.output_index))
+      .map((output, index) => [output.id, index + 1]),
+  )
+
+  return (jobs ?? []).flatMap((job) =>
+    [...(job.outputs ?? [])]
+      .sort((left, right) => left.output_index - right.output_index)
+      .map((output) => ({ job, output, version: versions.get(output.id) ?? 0 })),
+  )
+}
+
 export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDrawerProps) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<SceneDraft>(() => createDraft(scene))
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
   const saveMutation = useMutation({
     mutationFn: (sceneUpdate: SceneUpdate) => updateScene(scene.id, sceneUpdate),
     onSuccess: (updatedScene) => {
@@ -207,6 +233,26 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     disabled={saveMutation.isPending}
                   />
                 </Field>
+              </div>
+            </section>
+
+            <section>
+              <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
+              {historyQuery.isLoading ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">加载生成历史...</p> : null}
+              {historyQuery.isError ? <p className="mt-3 text-sm text-[color:var(--status-offline)]">生成历史加载失败</p> : null}
+              {!historyQuery.isLoading && !historyQuery.isError && historyQuery.data?.length === 0 ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">暂无生成历史</p> : null}
+              <div className="mt-3 space-y-3">
+                {createHistoryEntries(historyQuery.data).map(({ job, output, version }) => (
+                  <div key={output.id} className="border border-[color:var(--border-subtle)] p-3">
+                    <p className="text-sm">Version {version} · {output.asset.type}</p>
+                    {output.asset.type === 'image' ? (
+                      <img className="mt-2 max-h-40 w-full object-contain" src={`/api/v1/assets/${output.asset.id}/content`} alt={`Version ${version}`} />
+                    ) : (
+                      <video className="mt-2 max-h-40 w-full" controls preload="metadata" src={`/api/v1/assets/${output.asset.id}/content`} />
+                    )}
+                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">Job {job.status}</p>
+                  </div>
+                ))}
               </div>
             </section>
 
