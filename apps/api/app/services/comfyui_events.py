@@ -9,6 +9,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models.generation_job import GenerationJob
 from app.services.generation_broadcast import broadcast_generation_event
+from app.services.generation_archive import archive_generation
 
 
 _logger = get_logger("comfyui")

@@ -107,3 +107,36 @@ async def submit_prompt(workflow: dict[str, object], client_id: str | None = Non
 
     _logger.info("ComfyUI prompt submitted prompt_id=%s", prompt_id)
     return prompt_id
+
+async def get_history(prompt_id: str) -> dict[str, object]:
+    try:
+        async with httpx.AsyncClient(timeout=_SUBMIT_TIMEOUT_SECONDS) as client:
+            response = await client.get(_endpoint_url(f"history/{prompt_id}"))
+    except httpx.TimeoutException as error:
+        raise ComfyUIClientError("COMFYUI_TIMEOUT", "ComfyUI history request timed out") from error
+    except httpx.ConnectError as error:
+        raise ComfyUIClientError("COMFYUI_OFFLINE", "ComfyUI is offline") from error
+    except httpx.HTTPError as error:
+        raise ComfyUIClientError("COMFYUI_SUBMIT_FAILED", "ComfyUI history request failed") from error
+    if not response.is_success:
+        raise ComfyUIClientError("COMFYUI_SUBMIT_FAILED", "ComfyUI history request failed")
+    try:
+        value = response.json()
+    except (json.JSONDecodeError, ValueError) as error:
+        raise ComfyUIClientError("COMFYUI_INVALID_RESPONSE", "ComfyUI returned invalid history") from error
+    if not isinstance(value, dict):
+        raise ComfyUIClientError("COMFYUI_INVALID_RESPONSE", "ComfyUI returned invalid history")
+    return value
+
+
+async def download_output(filename: str, subfolder: str, output_type: str) -> bytes:
+    try:
+        async with httpx.AsyncClient(timeout=_SUBMIT_TIMEOUT_SECONDS) as client:
+            response = await client.get(_endpoint_url("view"), params={"filename": filename, "subfolder": subfolder, "type": output_type})
+    except httpx.TimeoutException as error:
+        raise ComfyUIClientError("COMFYUI_TIMEOUT", "ComfyUI output download timed out") from error
+    except httpx.HTTPError as error:
+        raise ComfyUIClientError("COMFYUI_SUBMIT_FAILED", "ComfyUI output download failed") from error
+    if not response.is_success:
+        raise ComfyUIClientError("COMFYUI_SUBMIT_FAILED", "ComfyUI output download failed")
+    return response.content
