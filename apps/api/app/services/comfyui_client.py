@@ -108,6 +108,46 @@ async def submit_prompt(workflow: dict[str, object], client_id: str | None = Non
     _logger.info("ComfyUI prompt submitted prompt_id=%s", prompt_id)
     return prompt_id
 
+async def cancel_prompt(prompt_id: str, *, allow_queue_fallback: bool) -> None:
+    """Cancel one prompt without using ComfyUI's global interrupt endpoint."""
+    jobs_url = _endpoint_url(f"api/jobs/{prompt_id}/cancel")
+    try:
+        async with httpx.AsyncClient(timeout=_SUBMIT_TIMEOUT_SECONDS) as client:
+            response = await client.post(jobs_url)
+    except httpx.TimeoutException as error:
+        raise ComfyUIClientError("COMFYUI_TIMEOUT", "ComfyUI cancel request timed out") from error
+    except httpx.ConnectError as error:
+        raise ComfyUIClientError("COMFYUI_OFFLINE", "ComfyUI is offline") from error
+    except httpx.HTTPError as error:
+        raise ComfyUIClientError("COMFYUI_CANCEL_FAILED", "ComfyUI cancel request failed") from error
+
+    if response.is_success:
+        try:
+            body = response.json()
+        except (json.JSONDecodeError, ValueError) as error:
+            raise ComfyUIClientError("COMFYUI_CANCEL_FAILED", "ComfyUI cancel response is invalid") from error
+        if isinstance(body, dict) and body.get("cancelled") is True:
+            return
+        raise ComfyUIClientError("COMFYUI_CANCEL_NOT_APPLIED", "ComfyUI did not apply prompt cancellation")
+
+    if not allow_queue_fallback or response.status_code not in {404, 405}:
+        code = "COMFYUI_RUNNING_CANCEL_UNSUPPORTED" if not allow_queue_fallback and response.status_code in {404, 405} else "COMFYUI_CANCEL_FAILED"
+        message = "Current ComfyUI version does not support safe running-job cancellation" if code == "COMFYUI_RUNNING_CANCEL_UNSUPPORTED" else "ComfyUI cancel request failed"
+        raise ComfyUIClientError(code, message)
+
+    try:
+        async with httpx.AsyncClient(timeout=_SUBMIT_TIMEOUT_SECONDS) as client:
+            queue_response = await client.post(_endpoint_url("queue"), json={"delete": [prompt_id]})
+    except httpx.TimeoutException as error:
+        raise ComfyUIClientError("COMFYUI_TIMEOUT", "ComfyUI queue cancel request timed out") from error
+    except httpx.ConnectError as error:
+        raise ComfyUIClientError("COMFYUI_OFFLINE", "ComfyUI is offline") from error
+    except httpx.HTTPError as error:
+        raise ComfyUIClientError("COMFYUI_CANCEL_FAILED", "ComfyUI queue cancel request failed") from error
+    if not queue_response.is_success:
+        raise ComfyUIClientError("COMFYUI_CANCEL_FAILED", "ComfyUI queue cancel request failed")
+
+
 async def get_history(prompt_id: str) -> dict[str, object]:
     try:
         async with httpx.AsyncClient(timeout=_SUBMIT_TIMEOUT_SECONDS) as client:

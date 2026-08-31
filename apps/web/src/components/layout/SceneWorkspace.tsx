@@ -1,7 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type DragEvent } from 'react'
 
-import { generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes } from '../../services/scenes'
+import { cancelGenerationJob, generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes, retryGenerationJob } from '../../services/scenes'
 import { generationJobsKey, useGenerationEvents } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
 import type { Scene } from '../../types/scene'
@@ -78,6 +78,20 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
     },
   })
   const generateMutation = useMutation({ mutationFn: (scene: Scene) => generateScene(scene.id, scene.workflow_template_id!), onSuccess: (submitted, scene) => queryClient.setQueryData<GenerationJob[]>(generationJobsKey(scene.id), (jobs = []) => [{ id: submitted.job_id, scene_id: scene.id, status: submitted.status }, ...jobs]) })
+  const cancelMutation = useMutation({
+    mutationFn: (job: GenerationJob) => cancelGenerationJob(job.id),
+    onSuccess: (cancelledJob) => {
+      queryClient.setQueryData<GenerationJob[]>(generationJobsKey(cancelledJob.scene_id), (jobs = []) =>
+        jobs.map((job) => (job.id === cancelledJob.id ? { ...job, ...cancelledJob } : job)),
+      )
+    },
+  })
+  const retryMutation = useMutation({
+    mutationFn: (job: GenerationJob) => retryGenerationJob(job.id),
+    onSuccess: (_submitted, job) => {
+      void queryClient.invalidateQueries({ queryKey: generationJobsKey(job.scene_id) })
+    },
+  })
   const isSorting = draggingSceneId !== null || reorderMutation.isPending
   const dragDisabled = scenes.length < 2 || reorderMutation.isPending
 
@@ -200,7 +214,11 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
               scene={scene}
               generationJob={jobsByScene.get(scene.id)}
               generating={generateMutation.isPending && generateMutation.variables?.id === scene.id}
+              cancelling={cancelMutation.isPending && cancelMutation.variables?.id === jobsByScene.get(scene.id)?.id}
+              retrying={retryMutation.isPending && retryMutation.variables?.id === jobsByScene.get(scene.id)?.id}
               onGenerate={(target) => generateMutation.mutate(target)}
+              onCancel={(job) => cancelMutation.mutate(job)}
+              onRetry={(job) => retryMutation.mutate(job)}
               position={index}
               isSorting={isSorting}
               dragDisabled={dragDisabled}

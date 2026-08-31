@@ -54,6 +54,14 @@ export function selectSceneAsset(sceneId: string, assetId: string): Promise<Scen
   })
 }
 
+export function cancelGenerationJob(jobId: string): Promise<GenerationJob> {
+  return request<GenerationJob>(`/api/v1/generation-jobs/${jobId}/cancel`, { method: 'POST' })
+}
+
+export function retryGenerationJob(jobId: string): Promise<GenerationSubmit> {
+  return request<GenerationSubmit>(`/api/v1/generation-jobs/${jobId}/retry`, { method: 'POST' })
+}
+
 export function generateScene(sceneId: string, workflowTemplateId: string): Promise<GenerationSubmit> {
   return request<GenerationSubmit>(`/api/v1/scenes/${sceneId}/generate`, {
     method: 'POST',

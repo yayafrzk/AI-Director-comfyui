@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import app.services.comfyui_events as comfyui_events
 from app.db.init_db import init_db
@@ -116,3 +117,23 @@ def test_listener_filters_frames_and_ignores_disconnect(monkeypatch):
 
     asyncio.run(comfyui_events.listen_for_generation("job-1", "client-1", future, disconnected))
 
+
+def test_cancelled_job_ignores_late_success_and_progress(tmp_path, monkeypatch):
+    engine = create_engine_for_path(tmp_path / "cancelled-events.db")
+    init_db(engine)
+    factory = create_session_factory(engine)
+    monkeypatch.setattr(comfyui_events, "SessionLocal", factory)
+    try:
+        job_id = _job(factory, "late")
+        with factory() as session:
+            job = session.get(GenerationJob, job_id)
+            job.status = "cancelled"
+            job.finished_at = datetime.now(timezone.utc)
+            session.commit()
+        assert comfyui_events.apply_event(job_id, _event("progress", value=1, max=2)) is None
+        assert comfyui_events.apply_event(job_id, _event("execution_start")) is None
+        assert comfyui_events.apply_event(job_id, _event("execution_success")) is None
+        with factory() as session:
+            assert session.get(GenerationJob, job_id).status == "cancelled"
+    finally:
+        engine.dispose()
