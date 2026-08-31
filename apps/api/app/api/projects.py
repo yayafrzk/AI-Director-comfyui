@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from app.services.export_service import ProjectExportError, export_selected_versions
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -82,3 +83,21 @@ def delete_project(
     db.delete(project)
     db.commit()
     return {"data": {"id": project_id}, "error": None}
+
+
+@router.post("/{project_id}/export", response_model=None)
+def export_project_selected_versions(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> dict | JSONResponse:
+    try:
+        export = export_selected_versions(db, project_id)
+    except ProjectExportError as error:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={
+                "data": None,
+                "error": {"code": error.code, "message": error.message},
+            },
+        )
+    return {"data": export, "error": None}
