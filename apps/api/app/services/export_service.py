@@ -1,6 +1,9 @@
+import json
+import os
 import re
 import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,6 +20,7 @@ from app.services.storage_assets import AssetPathInvalidError, resolve_asset_pat
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _SAFE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,16}\Z")
 _MAX_SCENE_TITLE_LENGTH = 80
+_MANIFEST_FILENAME = "manifest.json"
 
 
 class ProjectExportError(Exception):
@@ -76,8 +80,55 @@ def _create_export_directory(project_id: str) -> tuple[str, Path]:
         raise ProjectExportError("EXPORT_FAILED", "Project export failed", 500) from error
 
 
-def _plan_export(db: Session, project_id: str) -> list[_PlannedFile]:
-    if db.get(Project, project_id) is None:
+def _build_manifest(
+    project: Project,
+    export_id: str,
+    created_at: str,
+    planned_files: list[_PlannedFile],
+) -> dict:
+    return {
+        "schema_version": 1,
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "aspect_ratio": project.aspect_ratio,
+            "width": project.width,
+            "height": project.height,
+            "fps": project.fps,
+        },
+        "export": {"export_id": export_id, "created_at": created_at},
+        "scenes": [
+            {
+                "scene_id": planned_file.scene.id,
+                "scene_number": planned_file.scene.scene_number,
+                "title": planned_file.scene.title,
+                "selected_asset_id": planned_file.asset.id,
+                "filename": planned_file.filename,
+                "asset": {
+                    "type": planned_file.asset.type,
+                    "mime_type": planned_file.asset.mime_type,
+                    "width": planned_file.asset.width,
+                    "height": planned_file.asset.height,
+                    "duration_seconds": planned_file.asset.duration_seconds,
+                    "size_bytes": planned_file.asset.size_bytes,
+                },
+            }
+            for planned_file in planned_files
+        ],
+    }
+
+
+def _write_manifest(export_directory: Path, manifest: dict) -> None:
+    temporary_path = export_directory / f"{_MANIFEST_FILENAME}.tmp"
+    manifest_path = export_directory / _MANIFEST_FILENAME
+    with temporary_path.open("w", encoding="utf-8", newline="\n") as file:
+        json.dump(manifest, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+    os.replace(temporary_path, manifest_path)
+
+def _plan_export(db: Session, project_id: str) -> tuple[Project, list[_PlannedFile]]:
+    project = db.get(Project, project_id)
+    if project is None:
         raise ProjectExportError("PROJECT_NOT_FOUND", "Project not found", 404)
 
     scenes = db.scalars(
@@ -126,11 +177,11 @@ def _plan_export(db: Session, project_id: str) -> list[_PlannedFile]:
                 filename=_export_filename(scene, source_path),
             )
         )
-    return planned_files
+    return project, planned_files
 
 
 def export_selected_versions(db: Session, project_id: str) -> dict:
-    planned_files = _plan_export(db, project_id)
+    project, planned_files = _plan_export(db, project_id)
     export_id, export_directory = _create_export_directory(project_id)
     try:
         exported_files: list[ExportedFile] = []
@@ -144,6 +195,13 @@ def export_selected_versions(db: Session, project_id: str) -> dict:
                     filename=planned_file.filename,
                 )
             )
+        manifest = _build_manifest(
+            project,
+            export_id,
+            datetime.now(timezone.utc).isoformat(),
+            planned_files,
+        )
+        _write_manifest(export_directory, manifest)
     except Exception as error:
         shutil.rmtree(export_directory, ignore_errors=True)
         raise ProjectExportError("EXPORT_FAILED", "Project export failed", 500) from error
@@ -152,5 +210,6 @@ def export_selected_versions(db: Session, project_id: str) -> dict:
         "project_id": project_id,
         "export_id": export_id,
         "export_dir": f"projects/{project_id}/exports/{export_id}",
+        "manifest_filename": _MANIFEST_FILENAME,
         "files": [file.__dict__ for file in exported_files],
     }

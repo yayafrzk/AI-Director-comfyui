@@ -1,4 +1,6 @@
 import asyncio
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -155,10 +157,11 @@ def test_export_copies_selected_versions_in_scene_number_order(api) -> None:
     assert [file["scene_number"] for file in data["files"]] == [1, 2, 3]
     assert [file["asset_id"] for file in data["files"]] == [selected_one.id, selected_two.id, selected_three.id]
     export_directory = app_data_dir / data["export_dir"]
-    assert [path.name for path in export_directory.iterdir()] == [
+    assert sorted(path.name for path in export_directory.iterdir()) == [
         "01_第一幕.mp4",
         "02_第二幕.mp4",
         "03_第三幕.webp",
+        "manifest.json",
     ]
     assert (export_directory / "01_第一幕.mp4").read_bytes() == b"one"
     assert not (export_directory / "01_not-selected.mp4").exists()
@@ -333,5 +336,114 @@ def test_export_copy_failure_removes_files_created_for_this_export(api, monkeypa
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "EXPORT_FAILED"
     assert copy_count == 2
+    assert sorted(path.name for path in _export_directories(app_data_dir, project.id)) == [historical_export["export_id"]]
+    assert sorted(path.name for path in historical_directory.iterdir()) == historical_files
+
+def test_export_writes_manifest_snapshot(api) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory)
+    scene_three = _scene(session_factory, project.id, 3, "第三幕")
+    scene_one = _scene(session_factory, project.id, 1, "一二来到湖边")
+    scene_two = _scene(session_factory, project.id, 2, "第二幕")
+    asset_three = _asset(session_factory, app_data_dir, project.id, scene_three.id, "videos/third.webp", b"three")
+    asset_one = _asset(session_factory, app_data_dir, project.id, scene_one.id, "videos/private-source.mp4", b"one")
+    asset_two = _asset(session_factory, app_data_dir, project.id, scene_two.id, "videos/second.mp4", b"two")
+    with session_factory() as session:
+        persisted_asset = session.get(Asset, asset_one.id)
+        assert persisted_asset is not None
+        persisted_asset.width = 1920
+        persisted_asset.height = 1080
+        persisted_asset.duration_seconds = 5.0
+        session.commit()
+    _select(session_factory, scene_three.id, asset_three.id)
+    _select(session_factory, scene_one.id, asset_one.id)
+    _select(session_factory, scene_two.id, asset_two.id)
+
+    response = request("POST", f"/api/v1/projects/{project.id}/export")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["manifest_filename"] == "manifest.json"
+    export_directory = app_data_dir / data["export_dir"]
+    manifest_path = export_directory / data["manifest_filename"]
+    assert manifest_path.is_file()
+    raw_manifest = manifest_path.read_text(encoding="utf-8")
+    assert "一二来到湖边" in raw_manifest
+    assert "private-source.mp4" not in raw_manifest
+    assert "videos/" not in raw_manifest
+    assert str(app_data_dir) not in raw_manifest
+    manifest = json.loads(raw_manifest)
+
+    assert manifest["schema_version"] == 1
+    assert isinstance(manifest["schema_version"], int)
+    assert manifest["project"] == {
+        "id": project.id,
+        "name": project.name,
+        "aspect_ratio": project.aspect_ratio,
+        "width": project.width,
+        "height": project.height,
+        "fps": project.fps,
+    }
+    assert manifest["export"]["export_id"] == data["export_id"] == export_directory.name
+    created_at = datetime.fromisoformat(manifest["export"]["created_at"])
+    assert created_at.tzinfo is not None
+    assert created_at.utcoffset() == timezone.utc.utcoffset(created_at)
+    assert [scene["scene_number"] for scene in manifest["scenes"]] == [1, 2, 3]
+    assert [scene["filename"] for scene in manifest["scenes"]] == [file["filename"] for file in data["files"]]
+    assert manifest["scenes"][0]["selected_asset_id"] == asset_one.id
+    assert manifest["scenes"][0]["asset"] == {
+        "type": "video",
+        "mime_type": "video/mp4",
+        "width": 1920,
+        "height": 1080,
+        "duration_seconds": 5.0,
+        "size_bytes": 3,
+    }
+    assert manifest["scenes"][1]["selected_asset_id"] == asset_two.id
+    assert manifest["scenes"][1]["asset"] == {
+        "type": "video",
+        "mime_type": "video/mp4",
+        "width": None,
+        "height": None,
+        "duration_seconds": None,
+        "size_bytes": 3,
+    }
+
+
+def test_empty_project_export_writes_manifest(api) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory)
+
+    response = request("POST", f"/api/v1/projects/{project.id}/export")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["files"] == []
+    assert data["manifest_filename"] == "manifest.json"
+    manifest = json.loads((app_data_dir / data["export_dir"] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert manifest["scenes"] == []
+
+
+def test_manifest_write_failure_rolls_back_only_current_export(api, monkeypatch) -> None:
+    request, session_factory, app_data_dir = api
+    project = _project(session_factory)
+    scene = _scene(session_factory, project.id, 1, "Manifest failure")
+    asset = _asset(session_factory, app_data_dir, project.id, scene.id, "videos/manifest.mp4", b"content")
+    _select(session_factory, scene.id, asset.id)
+    historical_export = request("POST", f"/api/v1/projects/{project.id}/export").json()["data"]
+    historical_directory = app_data_dir / historical_export["export_dir"]
+    historical_files = sorted(path.name for path in historical_directory.iterdir())
+
+    from app.services import export_service
+
+    def fail_replace(source, destination):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(export_service.os, "replace", fail_replace)
+    response = request("POST", f"/api/v1/projects/{project.id}/export")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "EXPORT_FAILED"
     assert sorted(path.name for path in _export_directories(app_data_dir, project.id)) == [historical_export["export_id"]]
     assert sorted(path.name for path in historical_directory.iterdir()) == historical_files
