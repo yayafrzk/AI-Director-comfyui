@@ -18,3 +18,18 @@ export type ProjectCreate = {
   height: number
   fps: number
 }
+
+export type ProjectExportFile = {
+  scene_id: string
+  scene_number: number
+  asset_id: string
+  filename: string
+}
+
+export type ProjectExportResult = {
+  project_id: string
+  export_id: string
+  export_dir: string
+  manifest_filename: string
+  files: ProjectExportFile[]
+}
