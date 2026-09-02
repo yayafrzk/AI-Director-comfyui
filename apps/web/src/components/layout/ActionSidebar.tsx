@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 
-import { exportProject, ProjectRequestError } from '../../services/projects'
+import { downloadProjectExport, exportProject, ProjectRequestError } from '../../services/projects'
 
 type ActionSidebarProps = {
   projectId: string | null
@@ -20,6 +20,14 @@ const exportErrorMessages: Record<string, string> = {
   EXPORT_FAILED: '导出失败，请重试。',
 }
 
+const downloadErrorMessages: Record<string, string> = {
+  PROJECT_NOT_FOUND: '当前项目不存在。',
+  EXPORT_ID_INVALID: '导出记录无效，无法下载。',
+  EXPORT_NOT_FOUND: '导出文件不存在，请重新导出。',
+  EXPORT_CONTENT_INVALID: '导出内容异常，请重新导出。',
+  EXPORT_DOWNLOAD_FAILED: '下载失败，请重试。',
+}
+
 function exportErrorMessage(error: unknown): string {
   if (error instanceof ProjectRequestError) {
     return exportErrorMessages[error.code] ?? error.message
@@ -27,9 +35,20 @@ function exportErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '导出失败，请重试。'
 }
 
+function downloadErrorMessage(error: unknown): string {
+  if (error instanceof ProjectRequestError) {
+    return downloadErrorMessages[error.code] ?? error.message
+  }
+  return error instanceof Error ? error.message : '下载失败，请重试。'
+}
+
 export function ActionSidebar({ projectId }: ActionSidebarProps) {
   const exportMutation = useMutation({
     mutationFn: () => exportProject(projectId!),
+  })
+  const downloadMutation = useMutation({
+    mutationFn: ({ projectId: downloadProjectId, exportId }: { projectId: string; exportId: string }) =>
+      downloadProjectExport(downloadProjectId, exportId),
   })
   const exportDisabled = projectId === null || exportMutation.isPending
   const exportStatus = projectId === null ? '未选择项目' : exportMutation.isPending ? '处理中' : '可导出'
@@ -38,7 +57,19 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
     if (projectId === null) {
       return
     }
+    downloadMutation.reset()
     exportMutation.mutate()
+  }
+
+  function handleDownload() {
+    const exportResult = exportMutation.data
+    if (!exportResult) {
+      return
+    }
+    downloadMutation.mutate({
+      projectId: exportResult.project_id,
+      exportId: exportResult.export_id,
+    })
   }
 
   return (
@@ -109,6 +140,24 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
               <dd className="mt-1 font-mono text-[color:var(--text-primary)]">{exportMutation.data.manifest_filename}</dd>
             </div>
           </dl>
+          <button
+            type="button"
+            disabled={downloadMutation.isPending}
+            onClick={handleDownload}
+            className="mt-4 w-full border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-[color:var(--text-primary)] transition-colors hover:bg-[color:var(--surface-base)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {downloadMutation.isPending ? '下载中...' : '下载 ZIP'}
+          </button>
+          {downloadMutation.isSuccess ? (
+            <p aria-live="polite" className="mt-2 text-xs leading-5 text-[color:var(--text-muted)]">
+              下载已开始
+            </p>
+          ) : null}
+          {downloadMutation.isError ? (
+            <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">
+              {downloadErrorMessage(downloadMutation.error)}
+            </p>
+          ) : null}
         </section>
       ) : null}
 

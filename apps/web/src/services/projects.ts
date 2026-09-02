@@ -50,3 +50,39 @@ export function exportProject(projectId: string): Promise<ProjectExportResult> {
     method: 'POST',
   })
 }
+
+export async function downloadProjectExport(projectId: string, exportId: string): Promise<void> {
+  const response = await fetch(
+    `${projectsPath}/${encodeURIComponent(projectId)}/exports/${encodeURIComponent(exportId)}/download`,
+  )
+
+  if (!response.ok) {
+    let errorCode = 'EXPORT_DOWNLOAD_FAILED'
+    let errorMessage = '下载失败，请重试。'
+    try {
+      const payload = (await response.json()) as ApiResponse<never>
+      errorCode = payload.error?.code ?? errorCode
+      errorMessage = payload.error?.message ?? errorMessage
+    } catch {
+      // The download endpoint may return a non-JSON error response.
+    }
+    throw new ProjectRequestError(errorCode, errorMessage)
+  }
+
+  const blob = await response.blob()
+  const contentDisposition = response.headers.get('content-disposition')
+  const filename = contentDisposition?.match(/filename="([^"]+)"/)?.[1] ?? `export-${exportId}.zip`
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+
+  try {
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.hidden = true
+    document.body.append(anchor)
+    anchor.click()
+  } finally {
+    anchor.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+}
