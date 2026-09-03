@@ -2,14 +2,9 @@
 
 ## [Unreleased]
 
-### Planned
-- V0.1 project skeleton
-- Project CRUD
-- Scene board
-- Asset management
-- ComfyUI bridge
-- Generation jobs
-- Export
+### 2026-09
+- TASK-001 ~ TASK-040 core phase completed: generation pipeline, output archive/history, selected version, retry/cancel, project export, manifest, and ZIP download.
+- V0.1 Closure Phase started.
 
 ---
 

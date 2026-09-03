@@ -25,6 +25,41 @@
 
 ---
 
+## V0.1 Closure Phase
+
+V0.1 核心 backend、生成、归档、历史、多版本、Selected Version、导出、manifest 与 ZIP download 已完成。V0.1 尚未完成；以下 Closure tasks 完成并通过集成验收后才可标记为 complete：
+
+- TASK-041 — V0.1 Baseline / Docs Sync
+- TASK-042 — Frontend Scene Create + Delete
+- TASK-043 — Frontend Asset Import / Reference Management
+- TASK-044 — WorkflowTemplate API: List + Register/Import
+- TASK-045 — Frontend Workflow Selection + Scene Binding
+- TASK-046 — TopBar Real Project + ComfyUI Health
+- TASK-047 — Unified Frontend API Error UX
+- TASK-048 — Core V0.1 Integration Test
+
+### V0.1 最终验收
+
+用户必须能够从浏览器 UI 完整完成以下链路：
+
+1. 创建 Project。
+2. 创建至少 6 个 Scene。
+3. 编辑 Scene title / prompt / seed / duration。
+4. 导入首帧或参考素材。
+5. 选择 Workflow。
+6. 提交 ComfyUI 生成。
+7. 查看 queued / running / completed / failed。
+8. 查看生成历史与多个版本。
+9. cancel / retry。
+10. 选择最终版本。
+11. 导出 Project。
+12. 下载 ZIP。
+13. 在 ZIP 中获得按 `scene_number` 排序的 selected assets 与 `manifest.json`。
+
+只有以上链路可从 UI 完整走通，才可标记 **V0.1 Complete**。
+
+---
+
 ## V0.2 — AI 视频生产增强
 
 - Character Library

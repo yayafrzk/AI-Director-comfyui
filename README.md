@@ -6,6 +6,28 @@
 
 **故事/创意 → 项目 → 分镜 → 首帧/参考图 → Prompt → ComfyUI Workflow → 生成任务 → 多版本选择 → 素材导出 → 剪映后期**
 
+## Current Status
+
+V0.1 核心 backend、生成与导出链路已完成，当前进入 **V0.1 Closure Phase**。
+
+已完成：
+
+- Project / Scene
+- Assets backend
+- Workflow core
+- ComfyUI generation 与 WebSocket
+- Generation history、Selected Version、Retry / Cancel
+- Project Export、manifest.json、ZIP download
+
+待完成 V0.1：
+
+- Scene create/delete UI
+- Asset import 与 reference management UI
+- Workflow API 与 Scene workflow selection UI
+- TopBar real Project 与 ComfyUI health status
+- Unified frontend API error UX
+- Core V0.1 integration test
+
 ## V0.1 范围
 
 V0.1 必做：

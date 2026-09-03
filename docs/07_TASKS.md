@@ -2,6 +2,10 @@
 
 规则：一次只执行一个 Task；每个 Task 建议单独分支/commit。
 
+## 当前状态
+
+`TASK-001 ~ TASK-040` 已完成。以下历史任务表保留其真实实现范围；TASK-039 与 TASK-040 已按实际交付修正。
+
 | ID | 任务 | 范围 | 验收 |
 |---|---|---|---|
 | TASK-001 | 初始化 Git 仓库与目录结构 | 创建固定项目目录；不实现业务。 | 目录符合 AGENTS.md；Git 可正常工作。 |
@@ -40,10 +44,23 @@
 | TASK-034 | 实现 Selected Version | 可把一个 Asset 设为最终版本。 | 刷新后 selected 状态保持。 |
 | TASK-035 | 实现取消/失败重试 | cancel + retry。 | 重试产生新 Job，不覆盖旧记录。 |
 | TASK-036 | 实现导出服务 | 按 scene_number 导出 selected 版本。 | 输出 01_xxx.mp4、02_xxx.mp4。 |
-| TASK-037 | 导出 manifest.json | 包含场景、Prompt、Seed、workflow、文件名。 | JSON 可读且信息完整。 |
+| TASK-037 | 导出 manifest.json | 为每次 project export 写入 schema_version、project/export metadata、Scene selected asset 与导出文件信息。 | manifest 与导出文件使用同一 scene 顺序和 filename；UTF-8 JSON；失败回滚当前 export。 |
 | TASK-038 | 前端导出面板 | 右侧操作区增加导出。 | 可触发并显示导出路径。 |
-| TASK-039 | 错误统一与 Toast | 统一 API error 结构。 | ComfyUI 离线/OOM 能显示清楚。 |
-| TASK-040 | 核心集成测试 | 覆盖 Project→Scene→Generate→Output→Export。 | 核心链路测试通过。 |
+| TASK-039 | Export Bundle Download API | 将既有 export directory 安全打包为临时 ZIP，并提供下载 API。 | ZIP 仅含顶层安全文件与 manifest；失败不影响历史 export。 |
+| TASK-040 | Frontend Export ZIP Download | 在当前 export success UI 下载该次 export 的 ZIP。 | 使用 GET download endpoint；pending 防重复；错误保留 backend code。 |
+
+## V0.1 Closure Phase
+
+| ID | 任务 | 范围 | 验收 |
+|---|---|---|---|
+| TASK-041 | V0.1 Baseline / Docs Sync | 修正文档历史、记录当前基线并建立 Closure Plan。 | 文档反映 TASK-001 ~ TASK-040 的真实实现与 V0.1 验收链路。 |
+| TASK-042 | Frontend Scene Create + Delete | 在 Project 内复用现有 Scene API 创建与删除 Scene。 | 空 Project 可新建 Scene；多个创建正常；删除后列表同步；刷新后状态保持。 |
+| TASK-043 | Frontend Asset Import / Reference Management | 接入既有 Asset upload/content backend，覆盖 image、video、reference。 | 可选择并上传首帧、参考图、普通素材；图片/视频可预览；中文文件名正常。 |
+| TASK-044 | WorkflowTemplate API: List + Register/Import | 为既有 WorkflowTemplate model、loader 与 builder 提供最小可用 API。 | 可 list templates、register/import local template、读取 template metadata。 |
+| TASK-045 | Frontend Workflow Selection + Scene Binding | 在 Scene UI 选择 WorkflowTemplate 并保存 `workflow_template_id`。 | 选择并保存后刷新保持；从 Scene Card 点击生成使用所选 workflow。 |
+| TASK-046 | TopBar Real Project + ComfyUI Health | TopBar 使用真实 Project name 与 `GET /api/v1/comfyui/health`。 | 显示在线、离线、检查中；删除静态 ComfyUI 占位文案。 |
+| TASK-047 | Unified Frontend API Error UX | 统一前端 error type、常见 code mapping 与现有 inline error UI。 | 保留 backend `error.code`；覆盖 ComfyUI、workflow、generation、asset、export 与 cancel errors。 |
+| TASK-048 | Core V0.1 Integration Test | 为 Project→Scene→GenerationJob→Archive→Selected Version→Export→Manifest→ZIP Download 建立稳定 backend 核心链路测试。 | 使用 mock / controllable ComfyUI transport；不依赖真实 GPU、公网或人工启动 ComfyUI。 |
 
 ## 推荐阶段
 
