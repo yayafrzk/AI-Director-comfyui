@@ -1,15 +1,15 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 
+import { AssetUploadControl } from '../assets/AssetUploadControl'
+import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { downloadProjectExport, exportProject, ProjectRequestError } from '../../services/projects'
 
 type ActionSidebarProps = {
   projectId: string | null
 }
 
-const unavailableActions = [
-  { name: '导入素材', detail: '管理首帧与参考素材' },
-  { name: '批量生成', detail: '提交多个分镜任务' },
-]
+const unavailableActions = [{ name: '批量生成', detail: '提交多个分镜任务' }]
 
 const exportErrorMessages: Record<string, string> = {
   SCENE_SELECTED_ASSET_MISSING: '有分镜尚未选择最终版本，无法导出。',
@@ -43,6 +43,9 @@ function downloadErrorMessage(error: unknown): string {
 }
 
 export function ActionSidebar({ projectId }: ActionSidebarProps) {
+  const [importOpen, setImportOpen] = useState(false)
+  const assetsQuery = useQuery({ queryKey: projectAssetsKey(projectId ?? 'no-project'), queryFn: () => getProjectAssets(projectId!), enabled: projectId !== null })
+  const sourceAssets = (assetsQuery.data ?? []).filter((asset) => asset.scene_id === null && asset.role === 'source')
   const exportMutation = useMutation({
     mutationFn: () => exportProject(projectId!),
   })
@@ -85,6 +88,12 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
       </div>
 
       <div className="mt-4 space-y-2">
+        <button type="button" disabled={projectId === null} onClick={() => setImportOpen((open) => !open)} className="flex w-full items-start gap-3 border border-[color:var(--accent)] bg-[var(--accent-soft)] p-3 text-left disabled:cursor-not-allowed disabled:opacity-60">
+          <span className="pt-0.5 font-mono text-[0.625rem] tracking-[0.1em] text-[color:var(--accent)]">01</span>
+          <span className="min-w-0 flex-1"><span className="block text-sm text-[color:var(--text-primary)]">导入素材</span><span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">管理项目图片与视频素材</span></span>
+          <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--accent)]">{importOpen ? '收起' : '可用'}</span>
+        </button>
+        {projectId !== null && importOpen ? <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3"><AssetUploadControl projectId={projectId} role="source" accept="image/*,video/*" label="选择图片或视频" />{assetsQuery.isError ? <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">素材加载失败</p> : null}<div className="mt-4 space-y-3">{sourceAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.type} · {asset.mime_type}</p>{asset.type === 'video' ? <video controls preload="metadata" className="mt-2 w-full" src={assetContentUrl(asset.id)} /> : <img className="mt-2 max-h-32 w-full object-contain" src={assetContentUrl(asset.id)} alt="项目素材" />}</div>)}</div></section> : null}
         {unavailableActions.map((action, index) => (
           <button
             key={action.name}
@@ -93,7 +102,7 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
             className="flex w-full items-start gap-3 border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3 text-left disabled:cursor-not-allowed disabled:opacity-70"
           >
             <span className="pt-0.5 font-mono text-[0.625rem] tracking-[0.1em] text-[color:var(--text-muted)]">
-              {String(index + 1).padStart(2, '0')}
+              {String(index + 2).padStart(2, '0')}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm text-[color:var(--text-primary)]">{action.name}</span>

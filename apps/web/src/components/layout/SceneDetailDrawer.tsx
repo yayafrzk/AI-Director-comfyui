@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
+import { AssetUploadControl } from '../assets/AssetUploadControl'
+import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { deleteScene, getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
 import { generationJobsKey } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
@@ -67,6 +69,8 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
+  const assetsQuery = useQuery({ queryKey: projectAssetsKey(projectId), queryFn: () => getProjectAssets(projectId) })
+  const sceneInputAssets = (assetsQuery.data ?? []).filter((asset) => asset.scene_id === scene.id && (asset.role === 'first_frame' || asset.role === 'reference'))
   const selectAssetMutation = useMutation({
     mutationFn: (assetId: string) => selectSceneAsset(scene.id, assetId),
     onSuccess: (updatedScene) => {
@@ -273,6 +277,15 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               </div>
             </section>
 
+            <section>
+              <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">素材</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div className="border border-[color:var(--border-subtle)] p-3"><p className="text-sm text-[color:var(--text-primary)]">首帧</p><AssetUploadControl projectId={projectId} sceneId={scene.id} type="image" role="first_frame" accept="image/*" label="选择图片" /></div>
+                <div className="border border-[color:var(--border-subtle)] p-3"><p className="text-sm text-[color:var(--text-primary)]">参考图</p><AssetUploadControl projectId={projectId} sceneId={scene.id} type="reference" role="reference" accept="image/*" label="选择图片" /></div>
+              </div>
+              {assetsQuery.isError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">素材加载失败</p> : null}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">{sceneInputAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.role === 'first_frame' ? '首帧' : '参考图'}</p><img className="mt-2 max-h-36 w-full object-contain" src={assetContentUrl(asset.id)} alt={asset.role === 'first_frame' ? '首帧' : '参考图'} /></div>)}</div>
+            </section>
             <section>
               <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
               {historyQuery.isLoading ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">加载生成历史...</p> : null}

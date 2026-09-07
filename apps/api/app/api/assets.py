@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -47,6 +47,20 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 def _asset_not_found() -> JSONResponse:
     return _error(status.HTTP_404_NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found")
+@router.get("/projects/{project_id}/assets", response_model=None)
+def list_project_assets(project_id: str, scene_id: str | None = Query(default=None), db: Session = Depends(get_db)) -> dict | JSONResponse:
+    if db.get(Project, project_id) is None:
+        return _error(status.HTTP_404_NOT_FOUND, "PROJECT_NOT_FOUND", "Project not found")
+    statement = select(Asset).where(Asset.project_id == project_id)
+    if scene_id is not None:
+        scene = db.get(Scene, scene_id)
+        if scene is None:
+            return _error(status.HTTP_404_NOT_FOUND, "SCENE_NOT_FOUND", "Scene not found")
+        if scene.project_id != project_id:
+            return _error(status.HTTP_400_BAD_REQUEST, "ASSET_SCENE_PROJECT_MISMATCH", "Scene does not belong to Project")
+        statement = statement.where(Asset.scene_id == scene_id)
+    assets = db.scalars(statement.order_by(Asset.created_at.asc(), Asset.id.asc())).all()
+    return {"data": [AssetRead.model_validate(asset) for asset in assets], "error": None}
 
 
 @router.post("/scenes/{scene_id}/assets/{asset_id}/select", response_model=None)

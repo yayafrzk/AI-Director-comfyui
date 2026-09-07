@@ -344,3 +344,53 @@ def test_upload_non_video_does_not_probe_metadata(api, monkeypatch, asset_type: 
     asset = response.json()["data"]
     assert (asset["width"], asset["height"], asset["duration_seconds"]) == (None, None, None)
     assert asset["thumbnail_path"] is None
+
+
+def _asset(session_factory, project_id: str, scene_id: str | None, role: str = "source") -> Asset:
+    with session_factory() as session:
+        asset = Asset(project_id=project_id, scene_id=scene_id, type="image", role=role, relative_path=f"images/{role}.png", thumbnail_path=None, mime_type="image/png", width=None, height=None, duration_seconds=None, size_bytes=1, hash=None)
+        session.add(asset)
+        session.commit()
+        session.refresh(asset)
+        return asset
+
+
+def test_list_assets_requires_existing_project(api) -> None:
+    request, _, _ = api
+    response = request("GET", "/api/v1/projects/missing/assets")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "PROJECT_NOT_FOUND"
+
+
+def test_list_project_assets_includes_all_roles_in_stable_order(api) -> None:
+    request, session_factory, _ = api
+    project = _project(session_factory, "List project")
+    source = _asset(session_factory, project.id, None)
+    output = _asset(session_factory, project.id, None, role="output")
+    response = request("GET", f"/api/v1/projects/{project.id}/assets")
+    assert response.status_code == 200
+    assert [asset["id"] for asset in response.json()["data"]] == [source.id, output.id]
+
+
+def test_list_project_assets_filters_by_scene(api) -> None:
+    request, session_factory, _ = api
+    project = _project(session_factory, "Filtered list")
+    scene = _scene(session_factory, project.id)
+    _asset(session_factory, project.id, None)
+    scene_asset = _asset(session_factory, project.id, scene.id, role="reference")
+    response = request("GET", f"/api/v1/projects/{project.id}/assets?scene_id={scene.id}")
+    assert response.status_code == 200
+    assert [asset["id"] for asset in response.json()["data"]] == [scene_asset.id]
+
+
+def test_list_project_assets_rejects_missing_or_other_project_scene(api) -> None:
+    request, session_factory, _ = api
+    project = _project(session_factory, "List project")
+    other_project = _project(session_factory, "Other project")
+    other_scene = _scene(session_factory, other_project.id)
+    missing = request("GET", f"/api/v1/projects/{project.id}/assets?scene_id=missing")
+    mismatch = request("GET", f"/api/v1/projects/{project.id}/assets?scene_id={other_scene.id}")
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "SCENE_NOT_FOUND"
+    assert mismatch.status_code == 400
+    assert mismatch.json()["error"]["code"] == "ASSET_SCENE_PROJECT_MISMATCH"
