@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import { getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
+import { deleteScene, getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
 import { generationJobsKey } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
 import type { Scene, SceneUpdate } from '../../types/scene'
@@ -64,6 +64,8 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
   const [draft, setDraft] = useState<SceneDraft>(() => createDraft(scene))
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
   const selectAssetMutation = useMutation({
     mutationFn: (assetId: string) => selectSceneAsset(scene.id, assetId),
@@ -85,11 +87,38 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
       setSaveError(error instanceof Error ? error.message : '分镜保存失败')
     },
   })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteScene(scene.id),
+    onSuccess: () => {
+      queryClient.setQueryData<Scene[]>(sceneQueryKey(projectId), (scenes = []) =>
+        scenes.filter((currentScene) => currentScene.id !== scene.id),
+      )
+      onClose()
+    },
+    onError: (error) => {
+      setDeleteError(error instanceof Error ? error.message : '删除分镜失败')
+    },
+  })
+  const isBusy = saveMutation.isPending || deleteMutation.isPending || selectAssetMutation.isPending
+  const isFormDisabled = isBusy || deleteConfirmationOpen
 
   function updateDraft(field: keyof SceneDraft, value: string) {
     setDraft((currentDraft) => ({ ...currentDraft, [field]: value }))
     setValidationError(null)
     setSaveError(null)
+  }
+
+  function handleDelete() {
+    setDeleteError(null)
+    setDeleteConfirmationOpen(true)
+  }
+
+  function handleCancelDelete() {
+    if (deleteMutation.isPending) {
+      return
+    }
+    setDeleteError(null)
+    setDeleteConfirmationOpen(false)
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -138,7 +167,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
         type="button"
         aria-label="关闭分镜详情"
         onClick={onClose}
-        disabled={saveMutation.isPending}
+        disabled={isFormDisabled}
         className="absolute inset-0 cursor-default bg-black/60 disabled:cursor-not-allowed"
       />
       <aside
@@ -155,7 +184,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
           <button
             type="button"
             onClick={onClose}
-            disabled={saveMutation.isPending}
+            disabled={isFormDisabled}
             aria-label="关闭"
             className="grid size-8 place-items-center border border-[color:var(--border-subtle)] text-lg leading-none text-[color:var(--text-muted)] hover:border-[color:var(--accent)] hover:text-[color:var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -163,7 +192,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
           </button>
         </header>
 
-        <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
+        <form noValidate onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-6">
             <section>
               <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">基础信息</p>
@@ -174,7 +203,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.title}
                     onChange={(event) => updateDraft('title', event.target.value)}
                     className={inputClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
                 <Field label="描述" htmlFor="scene-description">
@@ -184,7 +213,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.description}
                     onChange={(event) => updateDraft('description', event.target.value)}
                     className={textareaClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
                 <Field label="时长（秒）" htmlFor="scene-duration">
@@ -195,7 +224,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.durationSeconds}
                     onChange={(event) => updateDraft('durationSeconds', event.target.value)}
                     className={inputClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
               </div>
@@ -211,7 +240,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.prompt}
                     onChange={(event) => updateDraft('prompt', event.target.value)}
                     className={textareaClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
                 <Field label="Negative Prompt" htmlFor="scene-negative-prompt">
@@ -221,7 +250,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.negativePrompt}
                     onChange={(event) => updateDraft('negativePrompt', event.target.value)}
                     className={textareaClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
               </div>
@@ -238,7 +267,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     value={draft.seed}
                     onChange={(event) => updateDraft('seed', event.target.value)}
                     className={inputClassName}
-                    disabled={saveMutation.isPending}
+                    disabled={isFormDisabled}
                   />
                 </Field>
               </div>
@@ -271,7 +300,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                       <button
                         type="button"
                         onClick={() => selectAssetMutation.mutate(output.asset.id)}
-                        disabled={selectAssetMutation.isPending}
+                        disabled={isFormDisabled}
                         className="mt-3 border border-[color:var(--accent)] px-3 py-1.5 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {selectAssetMutation.isPending && selectAssetMutation.variables === output.asset.id ? '设置中...' : '设为最终版本'}
@@ -289,22 +318,60 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
             {saveError ? <DrawerError message={saveError} /> : null}
           </div>
 
-          <footer className="flex justify-end gap-3 border-t border-[color:var(--border-subtle)] bg-[var(--surface-base)] px-5 py-4 sm:px-6">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saveMutation.isPending}
-              className="border border-[color:var(--border-subtle)] px-4 py-2 text-sm text-[color:var(--text-muted)] hover:border-[color:var(--accent)] hover:text-[color:var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={saveMutation.isPending}
-              className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-4 py-2 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saveMutation.isPending ? '保存中...' : '保存'}
-            </button>
+          <footer className="border-t border-[color:var(--border-subtle)] bg-[var(--surface-base)] px-5 py-4 sm:px-6">
+            {deleteConfirmationOpen ? (
+              <div>
+                <p className="text-sm text-[color:var(--text-primary)]">确定删除「{scene.title.trim() || `分镜 ${sceneNumber}`}」？</p>
+                <p className="mt-1 text-xs text-[color:var(--text-muted)]">此操作无法撤销。</p>
+                {deleteError ? <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">{deleteError}</p> : null}
+                <div className="mt-3 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCancelDelete}
+                    disabled={deleteMutation.isPending}
+                    className="border border-[color:var(--border-subtle)] px-4 py-2 text-sm text-[color:var(--text-muted)] hover:border-[color:var(--accent)] hover:text-[color:var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    取消删除
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMutation.mutate()}
+                    disabled={deleteMutation.isPending}
+                    className="border border-[color:var(--status-offline)] bg-[color:var(--status-offline)]/15 px-4 py-2 text-sm text-[color:var(--status-offline)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deleteMutation.isPending ? '删除中...' : '确认删除'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isFormDisabled}
+                  className="border border-[color:var(--status-offline)] px-4 py-2 text-sm text-[color:var(--status-offline)] hover:bg-[color:var(--status-offline)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  删除分镜
+                </button>
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isFormDisabled}
+                    className="border border-[color:var(--border-subtle)] px-4 py-2 text-sm text-[color:var(--text-muted)] hover:border-[color:var(--accent)] hover:text-[color:var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isFormDisabled}
+                    className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-4 py-2 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saveMutation.isPending ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </div>
+            )}
           </footer>
         </form>
       </aside>

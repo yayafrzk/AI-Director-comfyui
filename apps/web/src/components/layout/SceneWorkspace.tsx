@@ -1,10 +1,10 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
-import { cancelGenerationJob, generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes, retryGenerationJob } from '../../services/scenes'
+import { cancelGenerationJob, createScene, generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes, retryGenerationJob } from '../../services/scenes'
 import { generationJobsKey, useGenerationEvents } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
-import type { Scene } from '../../types/scene'
+import type { Scene, SceneCreate } from '../../types/scene'
 import { SceneCard } from './SceneCard'
 import { SceneDetailDrawer } from './SceneDetailDrawer'
 
@@ -16,6 +16,11 @@ type ReorderVariables = {
   projectId: string
   sceneIds: string[]
   previousScenes: Scene[]
+}
+
+type CreateVariables = {
+  projectId: string
+  scene: SceneCreate
 }
 
 function sceneQueryKey(projectId: string | null) {
@@ -49,6 +54,11 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   const [draggingSceneId, setDraggingSceneId] = useState<string | null>(null)
   const [reorderError, setReorderError] = useState<{ projectId: string; message: string } | null>(null)
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createTitle, setCreateTitle] = useState('')
+  const [createDuration, setCreateDuration] = useState('5')
+  const [createValidationError, setCreateValidationError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const scenesQuery = useQuery({
     queryKey: sceneQueryKey(projectId),
@@ -60,6 +70,22 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   const generationQueries = useQueries({ queries: scenes.map((scene) => ({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })) })
   const jobsByScene = new Map(scenes.map((scene, index) => [scene.id, generationQueries[index]?.data?.[0]]))
   const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
+  const createMutation = useMutation({
+    mutationFn: ({ projectId: createProjectId, scene }: CreateVariables) => createScene(createProjectId, scene),
+    onSuccess: (createdScene, variables) => {
+      queryClient.setQueryData<Scene[]>(sceneQueryKey(variables.projectId), (currentScenes = []) =>
+        [...currentScenes, createdScene].sort((left, right) => left.scene_number - right.scene_number),
+      )
+      setCreateOpen(false)
+      setCreateTitle('')
+      setCreateDuration('5')
+      setCreateValidationError(null)
+      setCreateError(null)
+    },
+    onError: (error) => {
+      setCreateError(error instanceof Error ? error.message : '创建分镜失败')
+    },
+  })
   const reorderMutation = useMutation({
     mutationFn: ({ projectId: reorderProjectId, sceneIds }: ReorderVariables) => reorderScenes(reorderProjectId, sceneIds),
     onSuccess: (reorderedScenes, variables) => {
@@ -94,6 +120,56 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   })
   const isSorting = draggingSceneId !== null || reorderMutation.isPending
   const dragDisabled = scenes.length < 2 || reorderMutation.isPending
+
+  function handleOpenCreate() {
+    if (projectId === null || createMutation.isPending) {
+      return
+    }
+    setCreateTitle('')
+    setCreateDuration('5')
+    setCreateValidationError(null)
+    setCreateError(null)
+    setCreateOpen(true)
+  }
+
+  function handleCancelCreate() {
+    if (createMutation.isPending) {
+      return
+    }
+    setCreateOpen(false)
+    setCreateTitle('')
+    setCreateDuration('5')
+    setCreateValidationError(null)
+    setCreateError(null)
+  }
+
+  function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (projectId === null) {
+      return
+    }
+
+    const title = createTitle.trim()
+    const durationSeconds = Number(createDuration)
+    if (title === '') {
+      setCreateValidationError('标题不能为空')
+      return
+    }
+    if (createDuration.trim() === '' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      setCreateValidationError('时长必须是大于 0 的有效数字')
+      return
+    }
+
+    setCreateValidationError(null)
+    setCreateError(null)
+    createMutation.mutate({
+      projectId,
+      scene: {
+        title,
+        duration_seconds: durationSeconds,
+      },
+    })
+  }
 
   function handleDragStart(event: DragEvent<HTMLButtonElement>, sceneId: string) {
     if (projectId === null || reorderLockRef.current || scenes.length < 2) {
@@ -173,8 +249,68 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
             分镜工作区
           </h2>
         </div>
-        <span className="font-mono text-xs text-[color:var(--text-muted)]">{scenes.length} 个镜头</span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-[color:var(--text-muted)]">{scenes.length} 个镜头</span>
+          <button
+            type="button"
+            disabled={projectId === null || createOpen || createMutation.isPending}
+            onClick={handleOpenCreate}
+            className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-[color:var(--accent)] transition-colors hover:bg-[color:var(--surface-raised)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {createMutation.isPending ? '创建中...' : '+ 新建分镜'}
+          </button>
+        </div>
       </div>
+
+      {projectId !== null && createOpen ? (
+        <form noValidate onSubmit={handleCreate} className="mt-5 border border-[color:var(--border-subtle)] bg-[var(--surface-base)] p-4 sm:p-5">
+          <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">NEW SCENE</p>
+          <h3 className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">新建分镜</h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="create-scene-title" className="text-xs text-[color:var(--text-primary)]">标题</label>
+              <input
+                id="create-scene-title"
+                value={createTitle}
+                onChange={(event) => {
+                  setCreateTitle(event.target.value)
+                  setCreateValidationError(null)
+                  setCreateError(null)
+                }}
+                aria-invalid={createValidationError !== null}
+                aria-describedby={createValidationError ? 'create-scene-error' : undefined}
+                disabled={createMutation.isPending}
+                className={inputClassName}
+              />
+            </div>
+            <div>
+              <label htmlFor="create-scene-duration" className="text-xs text-[color:var(--text-primary)]">时长（秒）</label>
+              <input
+                id="create-scene-duration"
+                type="number"
+                min="0"
+                step="any"
+                value={createDuration}
+                onChange={(event) => {
+                  setCreateDuration(event.target.value)
+                  setCreateValidationError(null)
+                  setCreateError(null)
+                }}
+                aria-invalid={createValidationError !== null}
+                aria-describedby={createValidationError ? 'create-scene-error' : undefined}
+                disabled={createMutation.isPending}
+                className={inputClassName}
+              />
+            </div>
+          </div>
+          {createValidationError ? <p id="create-scene-error" role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">{createValidationError}</p> : null}
+          {createError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">{createError}</p> : null}
+          <div className="mt-4 flex justify-end gap-3">
+            <button type="button" onClick={handleCancelCreate} disabled={createMutation.isPending} className="border border-[color:var(--border-subtle)] px-4 py-2 text-sm text-[color:var(--text-muted)] hover:border-[color:var(--accent)] hover:text-[color:var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50">取消</button>
+            <button type="submit" disabled={createMutation.isPending} className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-4 py-2 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50">{createMutation.isPending ? '创建中...' : '创建'}</button>
+          </div>
+        </form>
+      ) : null}
 
       {reorderError?.projectId === projectId ? (
         <section className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-base)] px-4 py-4">
@@ -203,7 +339,12 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
       ) : null}
 
       {projectId !== null && !scenesQuery.isLoading && !scenesQuery.isError && scenes.length === 0 ? (
-        <EmptySceneState title="暂无分镜" description="后续将在这里管理 Scene。" />
+        <EmptySceneState
+          title="暂无分镜"
+          description="创建第一个分镜开始制作。"
+          onCreate={handleOpenCreate}
+          createDisabled={createOpen || createMutation.isPending}
+        />
       ) : null}
 
       {projectId !== null && !scenesQuery.isLoading && !scenesQuery.isError && scenes.length > 0 ? (
@@ -241,9 +382,11 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
 type EmptySceneStateProps = {
   title: string
   description: string
+  onCreate?: () => void
+  createDisabled?: boolean
 }
 
-function EmptySceneState({ title, description }: EmptySceneStateProps) {
+function EmptySceneState({ title, description, onCreate, createDisabled = false }: EmptySceneStateProps) {
   return (
     <section
       aria-labelledby="empty-scenes-heading"
@@ -260,7 +403,20 @@ function EmptySceneState({ title, description }: EmptySceneStateProps) {
           {title}
         </h3>
         <p className="mt-2 text-sm leading-6 text-[color:var(--text-muted)]">{description}</p>
+        {onCreate ? (
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={createDisabled}
+            className="mt-5 border border-[color:var(--accent)] bg-[var(--accent-soft)] px-4 py-2 text-sm text-[color:var(--accent)] transition-colors hover:bg-[color:var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            + 新建分镜
+          </button>
+        ) : null}
       </div>
     </section>
   )
 }
+
+const inputClassName =
+  'mt-2 w-full border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[color:var(--text-primary)] outline-none focus:border-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-60'

@@ -23,3 +23,13 @@ export type SceneUpdate = {
   seed?: number | null
   duration_seconds?: number
 }
+
+export type SceneCreate = {
+  title: string
+  description?: string | null
+  prompt?: string | null
+  negative_prompt?: string | null
+  seed?: number | null
+  duration_seconds: number
+  workflow_template_id?: string | null
+}

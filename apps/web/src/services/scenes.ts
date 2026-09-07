@@ -1,5 +1,5 @@
 import type { GenerationJob, GenerationStatus } from '../types/generation'
-import type { Scene, SceneUpdate } from '../types/scene'
+import type { Scene, SceneCreate, SceneUpdate } from '../types/scene'
 
 type ApiError = {
   code: string
@@ -26,6 +26,14 @@ export function getProjectScenes(projectId: string): Promise<Scene[]> {
   return request<Scene[]>(`/api/v1/projects/${projectId}/scenes`)
 }
 
+export function createScene(projectId: string, scene: SceneCreate): Promise<Scene> {
+  return request<Scene>(`/api/v1/projects/${encodeURIComponent(projectId)}/scenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scene),
+  })
+}
+
 export function reorderScenes(projectId: string, sceneIds: string[]): Promise<Scene[]> {
   return request<Scene[]>(`/api/v1/projects/${projectId}/scenes/reorder`, {
     method: 'POST',
@@ -39,6 +47,12 @@ export function updateScene(sceneId: string, sceneUpdate: SceneUpdate): Promise<
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sceneUpdate),
+  })
+}
+
+export function deleteScene(sceneId: string): Promise<{ id: string }> {
+  return request<{ id: string }>(`/api/v1/scenes/${encodeURIComponent(sceneId)}`, {
+    method: 'DELETE',
   })
 }
 
