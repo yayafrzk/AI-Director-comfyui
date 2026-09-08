@@ -1,10 +1,9 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { createProject, getProjects } from '../../services/projects'
+import { createProject, getProjects, projectsKey } from '../../services/projects'
 import type { Project } from '../../types/project'
 
-const projectQueryKey = ['projects']
 const emptyProjects: Project[] = []
 
 type ProjectSidebarProps = {
@@ -17,11 +16,11 @@ export function ProjectSidebar({ selectedProjectId, onSelectProject }: ProjectSi
   const [isCreating, setIsCreating] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
-  const projectsQuery = useQuery({ queryKey: projectQueryKey, queryFn: getProjects })
+  const projectsQuery = useQuery({ queryKey: projectsKey(), queryFn: getProjects })
   const createProjectMutation = useMutation({
     mutationFn: createProject,
     onSuccess: (project) => {
-      queryClient.setQueryData<Project[]>(projectQueryKey, (projects = []) => [...projects, project])
+      queryClient.setQueryData<Project[]>(projectsKey(), (projects = []) => [...projects, project])
       onSelectProject(project.id)
       setProjectName('')
       setCreateError(null)

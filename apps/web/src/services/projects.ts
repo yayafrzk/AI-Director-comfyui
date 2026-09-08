@@ -12,6 +12,10 @@ type ApiResponse<T> = {
 
 const projectsPath = '/api/v1/projects'
 
+export function projectsKey() {
+  return ['projects'] as const
+}
+
 export class ProjectRequestError extends Error {
   code: string
 

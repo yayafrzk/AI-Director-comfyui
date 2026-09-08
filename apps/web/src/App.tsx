@@ -10,7 +10,7 @@ function App() {
 
   return (
     <div className="grid min-h-dvh min-w-[20rem] grid-rows-[auto_1fr] bg-[var(--canvas)] text-[color:var(--text-primary)]">
-      <TopBar />
+      <TopBar selectedProjectId={selectedProjectId} />
       <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_17rem]">
         <ProjectSidebar selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} />
         <SceneWorkspace key={selectedProjectId ?? 'no-project'} projectId={selectedProjectId} />
