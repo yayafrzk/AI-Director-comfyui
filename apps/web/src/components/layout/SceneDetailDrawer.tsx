@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { deleteScene, getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
+import { getWorkflowTemplates, workflowTemplatesKey } from '../../services/workflows'
 import { generationJobsKey } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
 import type { Scene, SceneUpdate } from '../../types/scene'
@@ -21,6 +22,7 @@ type SceneDraft = {
   negativePrompt: string
   seed: string
   durationSeconds: string
+  workflowTemplateId: string
 }
 
 function sceneQueryKey(projectId: string) {
@@ -35,6 +37,7 @@ function createDraft(scene: Scene): SceneDraft {
     negativePrompt: scene.negative_prompt ?? '',
     seed: scene.seed?.toString() ?? '',
     durationSeconds: scene.duration_seconds.toString(),
+    workflowTemplateId: scene.workflow_template_id ?? '',
   }
 }
 
@@ -70,7 +73,9 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
   const assetsQuery = useQuery({ queryKey: projectAssetsKey(projectId), queryFn: () => getProjectAssets(projectId) })
+  const workflowTemplatesQuery = useQuery({ queryKey: workflowTemplatesKey(), queryFn: getWorkflowTemplates })
   const sceneInputAssets = (assetsQuery.data ?? []).filter((asset) => asset.scene_id === scene.id && (asset.role === 'first_frame' || asset.role === 'reference'))
+  const workflowTemplates = workflowTemplatesQuery.data ?? []
   const selectAssetMutation = useMutation({
     mutationFn: (assetId: string) => selectSceneAsset(scene.id, assetId),
     onSuccess: (updatedScene) => {
@@ -152,6 +157,8 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
     if (draft.negativePrompt !== (scene.negative_prompt ?? '')) sceneUpdate.negative_prompt = draft.negativePrompt
     if (seed !== scene.seed) sceneUpdate.seed = seed
     if (durationSeconds !== scene.duration_seconds) sceneUpdate.duration_seconds = durationSeconds
+    const workflowTemplateId = draft.workflowTemplateId === '' ? null : draft.workflowTemplateId
+    if (workflowTemplateId !== scene.workflow_template_id) sceneUpdate.workflow_template_id = workflowTemplateId
 
     if (Object.keys(sceneUpdate).length === 0) {
       onClose()
@@ -262,7 +269,36 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
 
             <section>
               <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成参数</p>
-              <div className="mt-3">
+              <div className="mt-3 space-y-4">
+                <Field label="Workflow" htmlFor="scene-workflow">
+                  <select
+                    id="scene-workflow"
+                    value={draft.workflowTemplateId}
+                    onChange={(event) => updateDraft('workflowTemplateId', event.target.value)}
+                    className={inputClassName}
+                    disabled={isFormDisabled || workflowTemplatesQuery.isLoading}
+                  >
+                    <option value="">未选择 Workflow</option>
+                    {draft.workflowTemplateId !== '' && !workflowTemplates.some((workflow) => workflow.id === draft.workflowTemplateId) ? (
+                      <option value={draft.workflowTemplateId}>未知 Workflow · {draft.workflowTemplateId}</option>
+                    ) : null}
+                    {workflowTemplates.map((workflow) => (
+                      <option
+                        key={workflow.id}
+                        value={workflow.id}
+                        disabled={!workflow.is_enabled && workflow.id !== draft.workflowTemplateId}
+                      >
+                        {workflow.name} · {workflow.version}
+                        {!workflow.is_enabled ? '（已禁用）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {workflowTemplatesQuery.isLoading ? <p className="mt-2 text-xs text-[color:var(--text-muted)]">正在加载 Workflow...</p> : null}
+                  {workflowTemplatesQuery.isError ? <p className="mt-2 text-xs text-[color:var(--status-offline)]">Workflow 列表加载失败</p> : null}
+                  {!workflowTemplatesQuery.isLoading && !workflowTemplatesQuery.isError && workflowTemplates.length === 0 ? (
+                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">暂无 Workflow，请先注册 WorkflowTemplate</p>
+                  ) : null}
+                </Field>
                 <Field label="Seed" htmlFor="scene-seed">
                   <input
                     id="scene-seed"

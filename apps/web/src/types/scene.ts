@@ -22,6 +22,7 @@ export type SceneUpdate = {
   negative_prompt?: string | null
   seed?: number | null
   duration_seconds?: number
+  workflow_template_id?: string | null
 }
 
 export type SceneCreate = {
