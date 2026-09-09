@@ -13,8 +13,8 @@ function App() {
       <TopBar selectedProjectId={selectedProjectId} />
       <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_17rem]">
         <ProjectSidebar selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} />
-        <SceneWorkspace key={selectedProjectId ?? 'no-project'} projectId={selectedProjectId} />
-        <ActionSidebar key={selectedProjectId ?? 'no-project'} projectId={selectedProjectId} />
+        <SceneWorkspace key={`scene-workspace-${selectedProjectId ?? 'no-project'}`} projectId={selectedProjectId} />
+        <ActionSidebar key={`action-sidebar-${selectedProjectId ?? 'no-project'}`} projectId={selectedProjectId} />
       </div>
     </div>
   )
