@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
+import { apiErrorMessage } from '../../lib/apiErrors'
 import { cancelGenerationJob, createScene, generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes, retryGenerationJob } from '../../services/scenes'
 import { generationJobsKey, useGenerationEvents } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
@@ -83,7 +84,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
       setCreateError(null)
     },
     onError: (error) => {
-      setCreateError(error instanceof Error ? error.message : '创建分镜失败')
+      setCreateError(apiErrorMessage(error, '创建分镜失败'))
     },
   })
   const reorderMutation = useMutation({
@@ -96,7 +97,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
 
       setReorderError({
         projectId: variables.projectId,
-        message: error instanceof Error ? error.message : '分镜排序保存失败',
+        message: apiErrorMessage(error, '分镜排序保存失败'),
       })
     },
     onSettled: () => {
@@ -333,7 +334,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
         <section className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-base)] px-4 py-4">
           <p className="text-sm text-[color:var(--text-primary)]">分镜加载失败</p>
           <p className="mt-1 text-xs text-[color:var(--text-muted)]">
-            {scenesQuery.error instanceof Error ? scenesQuery.error.message : '请稍后重试'}
+            {apiErrorMessage(scenesQuery.error, '分镜加载失败')}
           </p>
         </section>
       ) : null}
@@ -357,6 +358,21 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
               generating={generateMutation.isPending && generateMutation.variables?.id === scene.id}
               cancelling={cancelMutation.isPending && cancelMutation.variables?.id === jobsByScene.get(scene.id)?.id}
               retrying={retryMutation.isPending && retryMutation.variables?.id === jobsByScene.get(scene.id)?.id}
+              generationError={
+                generateMutation.isError && generateMutation.variables?.id === scene.id
+                  ? apiErrorMessage(generateMutation.error, '生成提交失败')
+                  : null
+              }
+              cancelError={
+                cancelMutation.isError && cancelMutation.variables?.id === jobsByScene.get(scene.id)?.id
+                  ? apiErrorMessage(cancelMutation.error, '取消任务失败，请重试。')
+                  : null
+              }
+              retryError={
+                retryMutation.isError && retryMutation.variables?.id === jobsByScene.get(scene.id)?.id
+                  ? apiErrorMessage(retryMutation.error, '重试任务失败，请重试。')
+                  : null
+              }
               onGenerate={(target) => generateMutation.mutate(target)}
               onCancel={(job) => cancelMutation.mutate(job)}
               onRetry={(job) => retryMutation.mutate(job)}

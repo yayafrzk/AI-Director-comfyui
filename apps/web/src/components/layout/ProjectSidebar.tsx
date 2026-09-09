@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { apiErrorMessage } from '../../lib/apiErrors'
 import { createProject, getProjects, projectsKey } from '../../services/projects'
 import type { Project } from '../../types/project'
 
@@ -82,7 +83,7 @@ export function ProjectSidebar({ selectedProjectId, onSelectProject }: ProjectSi
       </div>
 
       {projectsQuery.isLoading ? <p className="mt-4 text-xs text-[color:var(--text-muted)]">加载项目...</p> : null}
-      {projectsQuery.isError ? <p className="mt-4 text-xs text-[color:var(--text-muted)]">项目加载失败</p> : null}
+      {projectsQuery.isError ? <p className="mt-4 text-xs text-[color:var(--text-muted)]">{apiErrorMessage(projectsQuery.error, '项目加载失败')}</p> : null}
       {!projectsQuery.isLoading && !projectsQuery.isError && projects.length === 0 ? (
         <p className="mt-4 text-xs text-[color:var(--text-muted)]">暂无项目</p>
       ) : null}
@@ -136,7 +137,7 @@ export function ProjectSidebar({ selectedProjectId, onSelectProject }: ProjectSi
           {createError ? <p className="mt-2 text-xs text-[color:var(--text-muted)]">{createError}</p> : null}
           {createProjectMutation.isError ? (
             <p className="mt-2 text-xs text-[color:var(--text-muted)]">
-              {createProjectMutation.error instanceof Error ? createProjectMutation.error.message : '创建项目失败'}
+              {apiErrorMessage(createProjectMutation.error, '创建项目失败')}
             </p>
           ) : null}
           <div className="mt-3 flex gap-2">

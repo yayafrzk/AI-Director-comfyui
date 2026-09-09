@@ -1,46 +1,16 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
-import { downloadProjectExport, exportProject, ProjectRequestError } from '../../services/projects'
+import { downloadProjectExport, exportProject } from '../../services/projects'
 
 type ActionSidebarProps = {
   projectId: string | null
 }
 
 const unavailableActions = [{ name: '批量生成', detail: '提交多个分镜任务' }]
-
-const exportErrorMessages: Record<string, string> = {
-  SCENE_SELECTED_ASSET_MISSING: '有分镜尚未选择最终版本，无法导出。',
-  SCENE_SELECTED_ASSET_INVALID: '有分镜的最终版本无效，请重新选择。',
-  ASSET_FILE_NOT_FOUND: '所选素材文件不存在，无法导出。',
-  ASSET_PATH_INVALID: '所选素材文件路径无效，无法导出。',
-  PROJECT_NOT_FOUND: '当前项目不存在。',
-  EXPORT_FAILED: '导出失败，请重试。',
-}
-
-const downloadErrorMessages: Record<string, string> = {
-  PROJECT_NOT_FOUND: '当前项目不存在。',
-  EXPORT_ID_INVALID: '导出记录无效，无法下载。',
-  EXPORT_NOT_FOUND: '导出文件不存在，请重新导出。',
-  EXPORT_CONTENT_INVALID: '导出内容异常，请重新导出。',
-  EXPORT_DOWNLOAD_FAILED: '下载失败，请重试。',
-}
-
-function exportErrorMessage(error: unknown): string {
-  if (error instanceof ProjectRequestError) {
-    return exportErrorMessages[error.code] ?? error.message
-  }
-  return error instanceof Error ? error.message : '导出失败，请重试。'
-}
-
-function downloadErrorMessage(error: unknown): string {
-  if (error instanceof ProjectRequestError) {
-    return downloadErrorMessages[error.code] ?? error.message
-  }
-  return error instanceof Error ? error.message : '下载失败，请重试。'
-}
 
 export function ActionSidebar({ projectId }: ActionSidebarProps) {
   const [importOpen, setImportOpen] = useState(false)
@@ -93,7 +63,7 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
           <span className="min-w-0 flex-1"><span className="block text-sm text-[color:var(--text-primary)]">导入素材</span><span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">管理项目图片与视频素材</span></span>
           <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--accent)]">{importOpen ? '收起' : '可用'}</span>
         </button>
-        {projectId !== null && importOpen ? <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3"><AssetUploadControl projectId={projectId} role="source" accept="image/*,video/*" label="选择图片或视频" />{assetsQuery.isError ? <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">素材加载失败</p> : null}<div className="mt-4 space-y-3">{sourceAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.type} · {asset.mime_type}</p>{asset.type === 'video' ? <video controls preload="metadata" className="mt-2 w-full" src={assetContentUrl(asset.id)} /> : <img className="mt-2 max-h-32 w-full object-contain" src={assetContentUrl(asset.id)} alt="项目素材" />}</div>)}</div></section> : null}
+        {projectId !== null && importOpen ? <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3"><AssetUploadControl projectId={projectId} role="source" accept="image/*,video/*" label="选择图片或视频" />{assetsQuery.isError ? <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}</p> : null}<div className="mt-4 space-y-3">{sourceAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.type} · {asset.mime_type}</p>{asset.type === 'video' ? <video controls preload="metadata" className="mt-2 w-full" src={assetContentUrl(asset.id)} /> : <img className="mt-2 max-h-32 w-full object-contain" src={assetContentUrl(asset.id)} alt="项目素材" />}</div>)}</div></section> : null}
         {unavailableActions.map((action, index) => (
           <button
             key={action.name}
@@ -164,7 +134,7 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
           ) : null}
           {downloadMutation.isError ? (
             <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">
-              {downloadErrorMessage(downloadMutation.error)}
+              {apiErrorMessage(downloadMutation.error, '下载失败，请重试。')}
             </p>
           ) : null}
         </section>
@@ -173,14 +143,11 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
       {exportMutation.isError ? (
         <section role="alert" aria-live="polite" className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-raised)] px-3 py-3">
           <p className="font-mono text-[0.625rem] tracking-[0.12em] text-[color:var(--status-offline)]">EXPORT ERROR</p>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--text-primary)]">{exportErrorMessage(exportMutation.error)}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--text-primary)]">{apiErrorMessage(exportMutation.error, '导出失败，请重试。')}</p>
         </section>
       ) : null}
 
-      <div className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-raised)] px-3 py-3">
-        <p className="font-mono text-[0.625rem] tracking-[0.12em] text-[color:var(--text-muted)]">SYSTEM NOTE</p>
-        <p className="mt-1 text-xs leading-5 text-[color:var(--text-muted)]">连接状态仅为静态占位，不会访问 ComfyUI。</p>
-      </div>
+
     </aside>
   )
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
+import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { deleteScene, getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
@@ -93,7 +94,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
       onClose()
     },
     onError: (error) => {
-      setSaveError(error instanceof Error ? error.message : '分镜保存失败')
+      setSaveError(apiErrorMessage(error, '分镜保存失败'))
     },
   })
   const deleteMutation = useMutation({
@@ -105,7 +106,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
       onClose()
     },
     onError: (error) => {
-      setDeleteError(error instanceof Error ? error.message : '删除分镜失败')
+      setDeleteError(apiErrorMessage(error, '删除分镜失败'))
     },
   })
   const isBusy = saveMutation.isPending || deleteMutation.isPending || selectAssetMutation.isPending
@@ -294,7 +295,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     ))}
                   </select>
                   {workflowTemplatesQuery.isLoading ? <p className="mt-2 text-xs text-[color:var(--text-muted)]">正在加载 Workflow...</p> : null}
-                  {workflowTemplatesQuery.isError ? <p className="mt-2 text-xs text-[color:var(--status-offline)]">Workflow 列表加载失败</p> : null}
+                  {workflowTemplatesQuery.isError ? <p className="mt-2 text-xs text-[color:var(--status-offline)]">Workflow 列表加载失败：{apiErrorMessage(workflowTemplatesQuery.error, 'Workflow 列表加载失败')}</p> : null}
                   {!workflowTemplatesQuery.isLoading && !workflowTemplatesQuery.isError && workflowTemplates.length === 0 ? (
                     <p className="mt-2 text-xs text-[color:var(--text-muted)]">暂无 Workflow，请先注册 WorkflowTemplate</p>
                   ) : null}
@@ -319,13 +320,13 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                 <div className="border border-[color:var(--border-subtle)] p-3"><p className="text-sm text-[color:var(--text-primary)]">首帧</p><AssetUploadControl projectId={projectId} sceneId={scene.id} type="image" role="first_frame" accept="image/*" label="选择图片" /></div>
                 <div className="border border-[color:var(--border-subtle)] p-3"><p className="text-sm text-[color:var(--text-primary)]">参考图</p><AssetUploadControl projectId={projectId} sceneId={scene.id} type="reference" role="reference" accept="image/*" label="选择图片" /></div>
               </div>
-              {assetsQuery.isError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">素材加载失败</p> : null}
+              {assetsQuery.isError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}</p> : null}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">{sceneInputAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.role === 'first_frame' ? '首帧' : '参考图'}</p><img className="mt-2 max-h-36 w-full object-contain" src={assetContentUrl(asset.id)} alt={asset.role === 'first_frame' ? '首帧' : '参考图'} /></div>)}</div>
             </section>
             <section>
               <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
               {historyQuery.isLoading ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">加载生成历史...</p> : null}
-              {historyQuery.isError ? <p className="mt-3 text-sm text-[color:var(--status-offline)]">生成历史加载失败</p> : null}
+              {historyQuery.isError ? <p className="mt-3 text-sm text-[color:var(--status-offline)]">生成历史加载失败：{apiErrorMessage(historyQuery.error, '生成历史加载失败')}</p> : null}
               {!historyQuery.isLoading && !historyQuery.isError && historyQuery.data?.length === 0 ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">暂无生成历史</p> : null}
               <div className="mt-3 space-y-3">
                 {createHistoryEntries(historyQuery.data).map(({ job, output, version }) => (
@@ -356,7 +357,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                       </button>
                     )}
                     {selectAssetMutation.isError && selectAssetMutation.variables === output.asset.id ? (
-                      <p className="mt-2 text-xs text-[color:var(--status-offline)]">设置最终版本失败</p>
+                      <p className="mt-2 text-xs text-[color:var(--status-offline)]">{apiErrorMessage(selectAssetMutation.error, '设置最终版本失败')}</p>
                     ) : null}
                   </div>
                 ))}

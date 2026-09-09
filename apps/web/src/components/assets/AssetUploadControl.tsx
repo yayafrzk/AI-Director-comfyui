@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 
+import { apiErrorMessage } from '../../lib/apiErrors'
 import { projectAssetsKey, uploadAsset } from '../../services/assets'
 import type { Asset, AssetType } from '../../types/asset'
 
@@ -28,7 +29,7 @@ export function AssetUploadControl({ projectId, type, role, sceneId, accept, lab
       setError(null)
       if (inputRef.current) inputRef.current.value = ''
     },
-    onError: (requestError) => setError(requestError instanceof Error ? requestError.message : '上传失败'),
+    onError: (requestError) => setError(apiErrorMessage(requestError, '素材上传失败')),
   })
 
   function handleUpload() {
