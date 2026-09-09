@@ -121,6 +121,18 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   })
   const isSorting = draggingSceneId !== null || reorderMutation.isPending
   const dragDisabled = scenes.length < 2 || reorderMutation.isPending
+  const nextStepMessage =
+    projectId === null
+      ? '下一步：从左侧选择一个项目。'
+      : scenesQuery.isLoading
+        ? '正在读取项目分镜...'
+        : scenesQuery.isError
+          ? '暂时无法判断下一步，请先解决分镜加载错误。'
+          : scenes.length === 0
+            ? '下一步：创建第一个分镜。'
+            : scenes.some((scene) => !scene.workflow_template_id)
+              ? '下一步：打开未配置的分镜，选择 Workflow。'
+              : '下一步：配置完成，可以开始生成。'
 
   function handleOpenCreate() {
     if (projectId === null || createMutation.isPending) {
@@ -262,6 +274,27 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
           </button>
         </div>
       </div>
+
+      <section
+        aria-labelledby="scene-flow-heading"
+        className="mt-4 border border-[color:var(--border-subtle)] bg-[var(--surface-base)] px-3 py-3 sm:px-4"
+      >
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <h3 id="scene-flow-heading" className="shrink-0 text-xs font-semibold text-[color:var(--text-primary)]">制作流程</h3>
+          <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-[color:var(--text-muted)]">
+            <li className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-[color:var(--accent)]">1 分镜</li>
+            <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
+            <li className="border border-[color:var(--border-subtle)] px-2 py-1">2 配置</li>
+            <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
+            <li className="border border-[color:var(--border-subtle)] px-2 py-1">3 生成</li>
+            <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
+            <li className="border border-[color:var(--border-subtle)] px-2 py-1">4 选最终版</li>
+            <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
+            <li className="border border-[color:var(--border-subtle)] px-2 py-1">5 导出</li>
+          </ol>
+        </div>
+        <p role="status" aria-live="polite" className="mt-3 border-l-2 border-[color:var(--accent)] pl-3 text-xs leading-5 text-[color:var(--text-primary)]">{nextStepMessage}</p>
+      </section>
 
       {projectId !== null && createOpen ? (
         <form noValidate onSubmit={handleCreate} className="mt-5 border border-[color:var(--border-subtle)] bg-[var(--surface-base)] p-4 sm:p-5">
