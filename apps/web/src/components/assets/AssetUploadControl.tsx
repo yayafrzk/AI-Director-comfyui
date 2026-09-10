@@ -40,10 +40,11 @@ export function AssetUploadControl({ projectId, type, role, sceneId, accept, lab
   }
 
   return <div className="mt-3 space-y-2">
-    <label className="block text-xs text-[color:var(--text-muted)]">{label}
-      <input ref={inputRef} type="file" accept={accept} disabled={mutation.isPending} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(null) }} className="mt-1 block w-full text-xs text-[color:var(--text-muted)] disabled:opacity-50" />
+    <label className={`inline-flex items-center border border-[color:var(--accent)] px-3 py-2 text-sm text-[color:var(--accent)] transition-colors focus-within:ring-2 focus-within:ring-[color:var(--accent)] focus-within:ring-offset-2 focus-within:ring-offset-[color:var(--surface-raised)] ${mutation.isPending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--accent-soft)]'}`}>
+      <span>{label}</span>
+      <input ref={inputRef} type="file" accept={accept} disabled={mutation.isPending} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(null) }} className="sr-only" />
     </label>
-    {file ? <p className="break-all text-xs text-[color:var(--text-primary)]">{file.name}</p> : null}
+    <p aria-live="polite" className="break-all text-xs text-[color:var(--text-muted)]">{file ? `已选择：${file.name}` : '未选择文件'}</p>
     {error ? <p role="alert" className="text-xs text-[color:var(--status-offline)]">{error}</p> : null}
     <button type="button" onClick={handleUpload} disabled={mutation.isPending} className="border border-[color:var(--accent)] px-3 py-1.5 text-sm text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50">{mutation.isPending ? '上传中...' : '上传'}</button>
   </div>
