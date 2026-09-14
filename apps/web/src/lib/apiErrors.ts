@@ -27,6 +27,8 @@ const messages: Record<string, string> = {
   WORKFLOW_TEMPLATE_INVALID: 'Workflow 模板无效。',
   WORKFLOW_MANIFEST_INVALID: 'Workflow manifest 无效。',
   WORKFLOW_MANIFEST_MISMATCH: 'Workflow 配置与模板版本不匹配。',
+  WORKFLOW_TEMPLATE_SLUG_EXISTS: '已存在相同标识的 Workflow，请更换 Slug。',
+  WORKFLOW_TEMPLATE_IMPORT_FAILED: 'Workflow 注册失败，请重试。',
   WORKFLOW_INPUT_UNKNOWN: 'Workflow 包含未知输入。',
   WORKFLOW_INPUT_REQUIRED: 'Workflow 缺少必填输入。',
 

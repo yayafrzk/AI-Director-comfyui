@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
+import { WorkflowTemplateManager } from '../workflows/WorkflowTemplateManager'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { downloadProjectExport, exportProject } from '../../services/projects'
 
@@ -55,6 +56,10 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
         <h2 id="actions-heading" className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">
           操作
         </h2>
+      </div>
+
+      <div className="mt-4">
+        <WorkflowTemplateManager />
       </div>
 
       <div className="mt-4 space-y-2">
