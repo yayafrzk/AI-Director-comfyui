@@ -32,8 +32,10 @@ def test_lifecycle_events_create_frontend_contracts(tmp_path, monkeypatch):
         job_id, scene_id = _job(factory)
         running = comfyui_events.apply_event(job_id, _event("execution_start"))
         assert running == {"type": "generation.running", "job_id": job_id, "scene_id": scene_id, "status": "running"}
-        completed = comfyui_events.apply_event(job_id, _event("execution_success"))
-        assert completed == {"type": "generation.completed", "job_id": job_id, "scene_id": scene_id, "status": "completed"}
+        assert comfyui_events.apply_event(job_id, _event("execution_success")) is None
+        with factory() as session:
+            job = session.get(GenerationJob, job_id)
+            assert job.status == "running" and job.finished_at is None
     finally: engine.dispose()
 
 

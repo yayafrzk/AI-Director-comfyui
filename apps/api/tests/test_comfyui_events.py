@@ -55,11 +55,14 @@ def test_apply_event_lifecycle_and_terminal_idempotency(tmp_path, monkeypatch):
         comfyui_events.apply_event(job_id, _event("executed"))
         with factory() as session:
             assert session.get(GenerationJob, job_id).status == "running"
-        comfyui_events.apply_event(job_id, _event("execution_success"))
+        assert comfyui_events.apply_event(job_id, _event("execution_success")) is None
+        with factory() as session:
+            job = session.get(GenerationJob, job_id)
+            assert job.status == "running" and job.finished_at is None
         comfyui_events.apply_event(job_id, _event("execution_error", exception_message="CUDA out of memory"))
         with factory() as session:
             job = session.get(GenerationJob, job_id)
-            assert job.status == "completed" and job.finished_at is not None
+            assert job.status == "failed" and job.error_code == "CUDA_OOM" and job.finished_at is not None
     finally:
         engine.dispose()
 
@@ -135,5 +138,56 @@ def test_cancelled_job_ignores_late_success_and_progress(tmp_path, monkeypatch):
         assert comfyui_events.apply_event(job_id, _event("execution_success")) is None
         with factory() as session:
             assert session.get(GenerationJob, job_id).status == "cancelled"
+    finally:
+        engine.dispose()
+
+def test_listener_archives_before_broadcasting_completed(monkeypatch):
+    future = asyncio.new_event_loop().create_future()
+    future.set_result("prompt-1")
+    socket = _Socket(['{"type":"execution_success","data":{"prompt_id":"prompt-1"}}'])
+    archived = []
+    broadcast = []
+
+    async def archive(job_id):
+        archived.append(job_id)
+        return {"type": "generation.completed", "job_id": job_id, "scene_id": "scene-1", "status": "completed"}
+
+    async def publish(event):
+        broadcast.append(event)
+
+    monkeypatch.setattr(comfyui_events, "archive_generation", archive)
+    monkeypatch.setattr(comfyui_events, "broadcast_generation_event", publish)
+
+    asyncio.run(comfyui_events.listen_for_generation("job-1", "client-1", future, lambda _: socket))
+
+    assert archived == ["job-1"]
+    assert broadcast == [{"type": "generation.completed", "job_id": "job-1", "scene_id": "scene-1", "status": "completed"}]
+
+def test_execution_events_forward_only_real_node_ids(tmp_path, monkeypatch):
+    engine = create_engine_for_path(tmp_path / "executing-node.db")
+    init_db(engine)
+    factory = create_session_factory(engine)
+    monkeypatch.setattr(comfyui_events, "SessionLocal", factory)
+    try:
+        job_id = _job(factory)
+
+        started = comfyui_events.apply_event(job_id, _event("execution_start"))
+        assert started is not None
+        assert started["type"] == "generation.running"
+        assert started["status"] == "running"
+        assert "node_id" not in started
+
+        string_node = comfyui_events.apply_event(job_id, _event("executing", node="138"))
+        assert string_node is not None
+        assert string_node["node_id"] == "138"
+
+        integer_node = comfyui_events.apply_event(job_id, _event("executing", node=138))
+        assert integer_node is not None
+        assert integer_node["node_id"] == "138"
+
+        no_node = comfyui_events.apply_event(job_id, _event("executing", node=None))
+        assert no_node is not None
+        assert no_node["type"] == "generation.running"
+        assert "node_id" not in no_node
     finally:
         engine.dispose()

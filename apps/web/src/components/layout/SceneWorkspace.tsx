@@ -70,6 +70,23 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   useGenerationEvents(projectId !== null)
   const generationQueries = useQueries({ queries: scenes.map((scene) => ({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })) })
   const jobsByScene = new Map(scenes.map((scene, index) => [scene.id, generationQueries[index]?.data?.[0]]))
+  const generationJobs = [...jobsByScene.values()].filter((job): job is GenerationJob => job !== undefined)
+  const activeGenerationJob = generationJobs.find((job) => ['pending', 'queued', 'running'].includes(job.status))
+  const hasCompletedVersionAwaitingSelection = scenes.some((scene) => {
+    const job = jobsByScene.get(scene.id)
+    return job?.status === 'completed' && (job.outputs?.length ?? 0) > 0 && scene.selected_asset_id === null
+  })
+  const allScenesHaveFinalVersion = scenes.length > 0 && scenes.every((scene) => scene.selected_asset_id !== null)
+  const flowStep =
+    projectId === null || scenesQuery.isLoading || scenes.length === 0
+      ? 1
+      : activeGenerationJob
+        ? 3
+        : hasCompletedVersionAwaitingSelection
+          ? 4
+          : allScenesHaveFinalVersion
+            ? 5
+            : 2
   const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
   const createMutation = useMutation({
     mutationFn: ({ projectId: createProjectId, scene }: CreateVariables) => createScene(createProjectId, scene),
@@ -130,9 +147,15 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
           ? '暂时无法判断下一步，请先解决分镜加载错误。'
           : scenes.length === 0
             ? '下一步：创建第一个分镜。'
-            : scenes.some((scene) => !scene.workflow_template_id)
-              ? '下一步：打开未配置的分镜，选择 Workflow。'
-              : '下一步：配置完成，可以开始生成。'
+            : activeGenerationJob
+              ? '正在生成：任务状态会实时更新，完成后将自动归档到生成历史。'
+              : hasCompletedVersionAwaitingSelection
+                ? '下一步：打开已完成的分镜，在生成历史中选择最终版本。'
+                : allScenesHaveFinalVersion
+                  ? '下一步：所有分镜已选择最终版本，可以从右侧导出成果。'
+                  : scenes.some((scene) => !scene.workflow_template_id)
+                    ? '下一步：打开未配置的分镜，选择 Workflow。'
+                    : '下一步：配置完成，可以开始生成。'
 
   function handleOpenCreate() {
     if (projectId === null || createMutation.isPending) {
@@ -282,15 +305,15 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <h3 id="scene-flow-heading" className="shrink-0 text-xs font-semibold text-[color:var(--text-primary)]">制作流程</h3>
           <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-[color:var(--text-muted)]">
-            <li className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-[color:var(--accent)]">1 分镜</li>
+            <li className={flowStepClass(flowStep === 1)}>1 分镜</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className="border border-[color:var(--border-subtle)] px-2 py-1">2 配置</li>
+            <li className={flowStepClass(flowStep === 2)}>2 配置</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className="border border-[color:var(--border-subtle)] px-2 py-1">3 生成</li>
+            <li className={flowStepClass(flowStep === 3)}>3 生成</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className="border border-[color:var(--border-subtle)] px-2 py-1">4 选最终版</li>
+            <li className={flowStepClass(flowStep === 4)}>4 选最终版</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className="border border-[color:var(--border-subtle)] px-2 py-1">5 导出</li>
+            <li className={flowStepClass(flowStep === 5)}>5 导出</li>
           </ol>
         </div>
         <p role="status" aria-live="polite" className="mt-3 border-l-2 border-[color:var(--accent)] pl-3 text-xs leading-5 text-[color:var(--text-primary)]">{nextStepMessage}</p>
@@ -465,6 +488,13 @@ function EmptySceneState({ title, description, onCreate, createDisabled = false 
       </div>
     </section>
   )
+}
+
+
+function flowStepClass(isCurrent: boolean): string {
+  return isCurrent
+    ? 'border border-[color:var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-[color:var(--accent)]'
+    : 'border border-[color:var(--border-subtle)] px-2 py-1'
 }
 
 const inputClassName =

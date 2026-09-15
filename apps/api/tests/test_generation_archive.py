@@ -86,5 +86,12 @@ def test_archive_history_failure_marks_job_failed(tmp_path, monkeypatch):
     monkeypatch.setattr(archive,'get_history',fail)
     try:
         job_id,_=_job(factory);result=asyncio.run(archive.archive_generation(job_id))
-        with factory() as s: assert result['type']=='generation.failed' and s.get(GenerationJob,job_id).status=='failed' and s.query(Asset).count()==0 and s.query(GenerationOutput).count()==0
+        with factory() as s:
+            job = s.get(GenerationJob, job_id)
+            assert result['type'] == 'generation.failed'
+            assert result['scene_id'] == job.scene_id
+            assert job.status == 'failed'
+            assert job.error_code == 'COMFYUI_TIMEOUT'
+            assert s.query(Asset).count() == 0
+            assert s.query(GenerationOutput).count() == 0
     finally: engine.dispose()

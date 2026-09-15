@@ -61,6 +61,8 @@ async def archive_generation(job_id: str) -> dict[str, object]:
         session.rollback(); job = session.get(GenerationJob, job_id)
         if job is not None: job.status="failed"; job.error_code=error.code; job.error_message=str(error); session.commit()
         for path in created_paths: cleanup_asset_file(path)
-        return {"type":"generation.failed", "job_id":job_id,"status":"failed","error_code":error.code,"message":str(error)}
+        result = {"type":"generation.failed", "job_id":job_id,"status":"failed","error_code":error.code,"message":str(error)}
+        if job is not None: result["scene_id"] = job.scene_id
+        return result
     finally: session.close()
 

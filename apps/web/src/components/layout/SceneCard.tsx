@@ -29,6 +29,10 @@ export function SceneCard({ scene, generationJob, position, isSorting, dragDisab
   const canCancel = generationJob?.status === 'queued' || generationJob?.status === 'running' || generationJob?.status === 'pending'
   const canRetry = generationJob?.status === 'failed'
   const needsWorkflow = !scene.workflow_template_id
+  const generationProgress =
+    generationJob?.status === 'running' && typeof generationJob.progress === 'number'
+      ? Math.max(0, Math.min(1, generationJob.progress))
+      : null
 
   return <article onClick={() => onOpen(scene.id)} onDragEnter={() => onDragEnter(scene.id)} onDragOver={(event) => event.preventDefault()} className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-4 sm:p-5">
     <div className="flex items-start gap-4"><button type="button" draggable={!dragDisabled} disabled={dragDisabled} onDragStart={(event) => onDragStart(event, scene.id)} onDragEnd={onDragEnd} onClick={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()} aria-label={`拖动分镜 ${sceneNumber} 排序`} className="grid size-7 shrink-0 cursor-grab place-items-center border border-[color:var(--border-subtle)]">≡</button><span className="grid size-10 shrink-0 place-items-center border border-[color:var(--accent)] bg-[var(--accent-soft)] font-mono text-sm text-[color:var(--accent)]">{String(sceneNumber).padStart(2, '0')}</span><div className="min-w-0 flex-1"><h3 className="truncate text-base font-semibold">{scene.title.trim() || '未命名分镜'}</h3><p className="mt-2 line-clamp-2 text-sm text-[color:var(--text-muted)]">{scene.prompt?.trim() || '暂无 Prompt'}</p></div><div className="flex shrink-0 gap-2"><button
@@ -71,6 +75,18 @@ export function SceneCard({ scene, generationJob, position, isSorting, dragDisab
         ) : null}
       </div>
     </dl>
+    {generationProgress !== null ? (
+      <div
+        role="progressbar"
+        aria-label="生成进度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(generationProgress * 100)}
+        className="mt-3 h-1 overflow-hidden bg-[var(--canvas)]"
+      >
+        <div className="h-full bg-[var(--accent)] transition-[width] duration-200" style={{ width: `${generationProgress * 100}%` }} />
+      </div>
+    ) : null}
     {generationError ? <p role="alert" className="mt-3 text-xs leading-5 text-[color:var(--status-offline)]">{generationError}</p> : null}
     {cancelError ? <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">{cancelError}</p> : null}
     {retryError ? <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">{retryError}</p> : null}

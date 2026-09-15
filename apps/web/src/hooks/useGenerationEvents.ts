@@ -31,7 +31,17 @@ export function useGenerationEvents(enabled: boolean): void {
           return
         }
         queryClient.setQueryData<GenerationJob[]>(generationJobsKey(event.scene_id), (jobs = []) =>
-          jobs.map((job) => job.id === event.job_id ? { ...job, status: event.status, progress: event.progress ?? job.progress, node_id: event.node_id ?? job.node_id, error_code: event.error_code ?? job.error_code, error_message: event.message ?? job.error_message } : job),
+          jobs.map((job) => {
+            if (job.id !== event.job_id) return job
+            if (event.type === 'generation.progress') {
+              return { ...job, status: event.status, progress: event.progress ?? job.progress, node_id: event.node_id ?? job.node_id, error_code: event.error_code ?? job.error_code, error_message: event.message ?? job.error_message }
+            }
+            if (event.type === 'generation.running') {
+              const nodeChanged = event.node_id !== undefined && event.node_id !== job.node_id
+              return { ...job, status: event.status, progress: nodeChanged ? undefined : job.progress, node_id: event.node_id ?? job.node_id, error_code: event.error_code ?? job.error_code, error_message: event.message ?? job.error_message }
+            }
+            return { ...job, status: event.status, error_code: event.error_code ?? job.error_code, error_message: event.message ?? job.error_message }
+          }),
         )
       }
       socket.onclose = () => {

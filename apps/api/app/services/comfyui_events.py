@@ -46,6 +46,15 @@ def _outbound_event(job: GenerationJob, event_type: str, **fields: Any) -> dict[
     return {"type": event_type, "job_id": job.id, "scene_id": job.scene_id, "status": job.status, **fields}
 
 
+def _node_id(data: dict[str, Any]) -> str | None:
+    node = data.get("node")
+    if isinstance(node, str):
+        return node
+    if type(node) is int:
+        return str(node)
+    return None
+
+
 def apply_event(job_id: str, event: dict[str, Any]) -> dict[str, Any] | None:
     """Apply one matching ComfyUI event and return the frontend-safe lifecycle delta."""
     prompt_id = event_prompt_id(event)
@@ -61,19 +70,29 @@ def apply_event(job_id: str, event: dict[str, Any]) -> dict[str, Any] | None:
         now = datetime.now(timezone.utc)
         event_type = event.get("type")
         data = _event_data(event)
+        fields: dict[str, Any] = {}
         if event_type == "progress":
             value, maximum = data.get("value"), data.get("max")
             if not isinstance(value, (int, float)) or not isinstance(maximum, (int, float)) or maximum <= 0:
                 return None
-            return _outbound_event(job, "generation.progress", progress=max(0.0, min(1.0, value / maximum)), node_id=data.get("node"))
+            fields: dict[str, Any] = {"progress": max(0.0, min(1.0, value / maximum))}
+            node_id = _node_id(data)
+            if node_id is not None:
+                fields["node_id"] = node_id
+            return _outbound_event(job, "generation.progress", **fields)
         if event_type in {"execution_start", "executing"}:
             job.status = "running"
             job.started_at = job.started_at or now
             outbound_type = "generation.running"
+            fields = {}
+            if event_type == "executing":
+                node_id = _node_id(data)
+                if node_id is not None:
+                    fields["node_id"] = node_id
         elif event_type == "execution_success":
-            job.status = "completed"
-            job.finished_at = now
-            outbound_type = "generation.completed"
+            # Completion is owned by archive_generation(): outputs must be copied and
+            # persisted before a job can become visible as completed.
+            return None
         elif event_type == "execution_interrupted":
             job.status = "cancelled"
             job.finished_at = now
@@ -88,7 +107,6 @@ def apply_event(job_id: str, event: dict[str, Any]) -> dict[str, Any] | None:
         else:
             return None
         session.commit()
-        fields: dict[str, Any] = {}
         if job.status == "failed":
             fields = {"error_code": job.error_code, "message": job.error_message}
         return _outbound_event(job, outbound_type, **fields)
@@ -112,7 +130,10 @@ async def listen_for_generation(job_id: str, client_id: str, prompt_id_future: a
                 event = parse_event(message)
                 if event is None or event_prompt_id(event) != prompt_id:
                     continue
-                outbound = apply_event(job_id, event)
+                if event.get("type") == "execution_success":
+                    outbound = await archive_generation(job_id)
+                else:
+                    outbound = apply_event(job_id, event)
                 if outbound is not None:
                     await broadcast_generation_event(outbound)
     except asyncio.CancelledError:
