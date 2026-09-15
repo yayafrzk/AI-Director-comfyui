@@ -123,7 +123,7 @@ export function ProjectSidebar({ selectedProjectId, onSelectProject }: ProjectSi
       ) : null}
 
       {isCreating ? (
-        <form onSubmit={handleCreate} className="mt-4 border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3">
+        <form noValidate onSubmit={handleCreate} className="mt-4 border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3">
           <label htmlFor="project-name" className="text-xs text-[color:var(--text-primary)]">
             项目名称
           </label>

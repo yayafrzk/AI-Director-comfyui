@@ -272,6 +272,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成参数</p>
               <div className="mt-3 space-y-4">
                 <Field label="Workflow" htmlFor="scene-workflow">
+                  {/* V0.1: native select is intentional; custom listbox is deferred. */}
                   <select
                     id="scene-workflow"
                     value={draft.workflowTemplateId}
@@ -458,4 +459,4 @@ const inputClassName =
   'w-full border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[color:var(--text-primary)] outline-none focus:border-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-60'
 
 const textareaClassName =
-  'w-full resize-y border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-2 text-sm leading-6 text-[color:var(--text-primary)] outline-none focus:border-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-60'
+  'w-full resize-none border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-2 text-sm leading-6 text-[color:var(--text-primary)] outline-none focus:border-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-60'
