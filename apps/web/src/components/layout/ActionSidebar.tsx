@@ -11,12 +11,16 @@ type ActionSidebarProps = {
   projectId: string | null
 }
 
-const unavailableActions = [{ name: '批量生成', detail: '提交多个分镜任务' }]
-
 export function ActionSidebar({ projectId }: ActionSidebarProps) {
   const [importOpen, setImportOpen] = useState(false)
-  const assetsQuery = useQuery({ queryKey: projectAssetsKey(projectId ?? 'no-project'), queryFn: () => getProjectAssets(projectId!), enabled: projectId !== null })
-  const sourceAssets = (assetsQuery.data ?? []).filter((asset) => asset.scene_id === null && asset.role === 'source')
+  const assetsQuery = useQuery({
+    queryKey: projectAssetsKey(projectId ?? 'no-project'),
+    queryFn: () => getProjectAssets(projectId!),
+    enabled: projectId !== null,
+  })
+  const sourceAssets = (assetsQuery.data ?? []).filter(
+    (asset) => asset.scene_id === null && asset.role === 'source',
+  )
   const exportMutation = useMutation({
     mutationFn: () => exportProject(projectId!),
   })
@@ -25,7 +29,6 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
       downloadProjectExport(downloadProjectId, exportId),
   })
   const exportDisabled = projectId === null || exportMutation.isPending
-  const exportStatus = projectId === null ? '未选择项目' : exportMutation.isPending ? '处理中' : '可导出'
 
   function handleExport() {
     if (projectId === null) {
@@ -48,111 +51,138 @@ export function ActionSidebar({ projectId }: ActionSidebarProps) {
 
   return (
     <aside
-      aria-labelledby="actions-heading"
+      aria-labelledby="project-tools-heading"
       className="border-t border-[color:var(--border-subtle)] bg-[var(--surface-base)] p-4 lg:border-t-0 lg:border-l lg:p-5"
     >
       <div className="border-b border-[color:var(--border-subtle)] pb-4">
-        <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--text-muted)]">ACTIONS</p>
-        <h2 id="actions-heading" className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">
-          操作
+        <h2 id="project-tools-heading" className="text-sm font-semibold text-[color:var(--text-primary)]">
+          项目工具
         </h2>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--text-muted)]">
+          管理 Workflow、项目素材与最终导出
+        </p>
       </div>
 
       <div className="mt-4">
         <WorkflowTemplateManager />
       </div>
 
-      <div className="mt-4 space-y-2">
-        <button type="button" disabled={projectId === null} onClick={() => setImportOpen((open) => !open)} className="flex w-full items-start gap-3 border border-[color:var(--accent)] bg-[var(--accent-soft)] p-3 text-left disabled:cursor-not-allowed disabled:opacity-60">
-          <span className="pt-0.5 font-mono text-[0.625rem] tracking-[0.1em] text-[color:var(--accent)]">01</span>
-          <span className="min-w-0 flex-1"><span className="block text-sm text-[color:var(--text-primary)]">导入素材</span><span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">管理项目图片与视频素材</span></span>
-          <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--accent)]">{importOpen ? '收起' : '可用'}</span>
-        </button>
-        {projectId !== null && importOpen ? <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3"><AssetUploadControl projectId={projectId} role="source" accept="image/*,video/*" label="选择图片或视频" />{assetsQuery.isError ? <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}</p> : null}<div className="mt-4 space-y-3">{sourceAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.type} · {asset.mime_type}</p>{asset.type === 'video' ? <video controls preload="metadata" className="mt-2 w-full" src={assetContentUrl(asset.id)} /> : <img className="mt-2 max-h-32 w-full object-contain" src={assetContentUrl(asset.id)} alt="项目素材" />}</div>)}</div></section> : null}
-        {unavailableActions.map((action, index) => (
+      <div className="mt-4 space-y-3">
+        <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)]">
           <button
-            key={action.name}
             type="button"
-            disabled
-            className="flex w-full items-start gap-3 border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3 text-left disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={projectId === null}
+            onClick={() => setImportOpen((open) => !open)}
+            className="w-full p-3 text-left transition-colors hover:bg-[color:var(--surface-base)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <span className="pt-0.5 font-mono text-[0.625rem] tracking-[0.1em] text-[color:var(--text-muted)]">
-              {String(index + 2).padStart(2, '0')}
+            <span className="flex items-start justify-between gap-3">
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-[color:var(--text-primary)]">项目素材</span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">
+                  导入和查看项目参考图片、视频
+                </span>
+              </span>
+              {importOpen && projectId !== null ? (
+                <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--accent)]">收起</span>
+              ) : null}
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm text-[color:var(--text-primary)]">{action.name}</span>
-              <span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">{action.detail}</span>
-            </span>
-            <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--text-muted)]">待接入</span>
           </button>
-        ))}
 
-        <button
-          type="button"
-          disabled={exportDisabled}
-          onClick={handleExport}
-          className="flex w-full items-start gap-3 border border-[color:var(--accent)] bg-[var(--accent-soft)] p-3 text-left transition-colors hover:bg-[color:var(--surface-raised)] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <span className="pt-0.5 font-mono text-[0.625rem] tracking-[0.1em] text-[color:var(--accent)]">03</span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm text-[color:var(--text-primary)]">{exportMutation.isPending ? '导出中...' : '导出素材'}</span>
-            <span className="mt-1 block text-xs leading-5 text-[color:var(--text-muted)]">整理最终选择版本</span>
-          </span>
-          <span className="font-mono text-[0.625rem] tracking-[0.08em] text-[color:var(--accent)]">{exportStatus}</span>
-        </button>
+          {projectId === null ? (
+            <p className="border-t border-[color:var(--border-subtle)] px-3 py-2 text-xs text-[color:var(--text-muted)]">
+              请先选择项目
+            </p>
+          ) : null}
+
+          {projectId !== null && importOpen ? (
+            <div className="border-t border-[color:var(--border-subtle)] p-3">
+              <AssetUploadControl
+                projectId={projectId}
+                role="source"
+                accept="image/*,video/*"
+                label="选择图片或视频"
+              />
+              {assetsQuery.isError ? (
+                <p role="alert" className="mt-2 text-xs text-[color:var(--status-offline)]">
+                  素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}
+                </p>
+              ) : null}
+              <div className="mt-4 space-y-3">
+                {sourceAssets.map((asset) => (
+                  <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2">
+                    <p className="text-xs text-[color:var(--text-muted)]">
+                      {asset.type} · {asset.mime_type}
+                    </p>
+                    {asset.type === 'video' ? (
+                      <video controls preload="metadata" className="mt-2 w-full" src={assetContentUrl(asset.id)} />
+                    ) : (
+                      <img
+                        className="mt-2 max-h-32 w-full object-contain"
+                        src={assetContentUrl(asset.id)}
+                        alt="项目素材"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="border border-[color:var(--border-subtle)] bg-[var(--surface-raised)] p-3">
+          <p className="text-sm text-[color:var(--text-primary)]">导出最终成果</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--text-muted)]">
+            将各分镜已选中的最终版本整理并打包
+          </p>
+          {projectId === null ? (
+            <p className="mt-2 text-xs text-[color:var(--text-muted)]">请先选择项目</p>
+          ) : null}
+          <button
+            type="button"
+            disabled={exportDisabled}
+            onClick={handleExport}
+            className="mt-3 w-full border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-[color:var(--text-primary)] transition-colors hover:bg-[color:var(--surface-base)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exportMutation.isPending ? '正在导出...' : '开始导出'}
+          </button>
+
+          {exportMutation.isSuccess ? (
+            <div aria-live="polite" className="mt-4 border-t border-[color:var(--border-subtle)] pt-3">
+              <p className="text-sm text-[color:var(--text-primary)]">导出完成</p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--text-muted)]">
+                已整理 {exportMutation.data.files.length} 个文件。
+              </p>
+              <button
+                type="button"
+                disabled={downloadMutation.isPending}
+                onClick={handleDownload}
+                className="mt-3 w-full border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-[color:var(--text-primary)] transition-colors hover:bg-[color:var(--surface-base)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {downloadMutation.isPending ? '下载中...' : '下载 ZIP'}
+              </button>
+              {downloadMutation.isSuccess ? (
+                <p aria-live="polite" className="mt-2 text-xs leading-5 text-[color:var(--text-muted)]">
+                  下载已开始
+                </p>
+              ) : null}
+              {downloadMutation.isError ? (
+                <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">
+                  {apiErrorMessage(downloadMutation.error, '下载失败，请重试。')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {exportMutation.isError ? (
+            <div role="alert" aria-live="polite" className="mt-4 border-t border-[color:var(--border-subtle)] pt-3">
+              <p className="text-sm text-[color:var(--text-primary)]">导出失败</p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--status-offline)]">
+                {apiErrorMessage(exportMutation.error, '导出失败，请重试。')}
+              </p>
+            </div>
+          ) : null}
+        </section>
       </div>
-
-      {exportMutation.isSuccess ? (
-        <section aria-live="polite" className="mt-5 border-l-2 border-[color:var(--accent)] bg-[var(--surface-raised)] px-3 py-3">
-          <p className="font-mono text-[0.625rem] tracking-[0.12em] text-[color:var(--accent)]">EXPORT COMPLETE</p>
-          <p className="mt-1 text-sm text-[color:var(--text-primary)]">导出完成</p>
-          <dl className="mt-3 space-y-2 text-xs leading-5 text-[color:var(--text-muted)]">
-            <div className="flex items-center justify-between gap-3">
-              <dt>文件数量</dt>
-              <dd className="font-mono text-[color:var(--text-primary)]">{exportMutation.data.files.length} 个文件</dd>
-            </div>
-            <div>
-              <dt className="font-mono text-[0.625rem] tracking-[0.1em]">EXPORT ID</dt>
-              <dd className="mt-1 break-all font-mono text-[color:var(--text-primary)]">{exportMutation.data.export_id}</dd>
-            </div>
-            <div>
-              <dt>目录</dt>
-              <dd className="mt-1 break-all font-mono text-[color:var(--text-primary)]">{exportMutation.data.export_dir}</dd>
-            </div>
-            <div>
-              <dt>Manifest</dt>
-              <dd className="mt-1 font-mono text-[color:var(--text-primary)]">{exportMutation.data.manifest_filename}</dd>
-            </div>
-          </dl>
-          <button
-            type="button"
-            disabled={downloadMutation.isPending}
-            onClick={handleDownload}
-            className="mt-4 w-full border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-[color:var(--text-primary)] transition-colors hover:bg-[color:var(--surface-base)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {downloadMutation.isPending ? '下载中...' : '下载 ZIP'}
-          </button>
-          {downloadMutation.isSuccess ? (
-            <p aria-live="polite" className="mt-2 text-xs leading-5 text-[color:var(--text-muted)]">
-              下载已开始
-            </p>
-          ) : null}
-          {downloadMutation.isError ? (
-            <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--status-offline)]">
-              {apiErrorMessage(downloadMutation.error, '下载失败，请重试。')}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      {exportMutation.isError ? (
-        <section role="alert" aria-live="polite" className="mt-5 border-l-2 border-[color:var(--status-offline)] bg-[var(--surface-raised)] px-3 py-3">
-          <p className="font-mono text-[0.625rem] tracking-[0.12em] text-[color:var(--status-offline)]">EXPORT ERROR</p>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--text-primary)]">{apiErrorMessage(exportMutation.error, '导出失败，请重试。')}</p>
-        </section>
-      ) : null}
-
-
     </aside>
   )
 }
