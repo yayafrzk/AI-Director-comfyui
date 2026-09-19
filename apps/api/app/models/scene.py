@@ -35,6 +35,7 @@ class Scene(Base):
     negative_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    megapixels: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
     workflow_template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     selected_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String, default="draft", nullable=False)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SceneCreate(BaseModel):
@@ -10,6 +10,7 @@ class SceneCreate(BaseModel):
     negative_prompt: str | None = None
     seed: int | None = None
     duration_seconds: float
+    megapixels: float = Field(default=0.6, ge=0.1, le=16.0)
     workflow_template_id: str | None = None
 
 
@@ -20,6 +21,7 @@ class SceneUpdate(BaseModel):
     negative_prompt: str | None = None
     seed: int | None = None
     duration_seconds: float | None = None
+    megapixels: float = Field(default=None, ge=0.1, le=16.0)
     workflow_template_id: str | None = None
     status: str | None = None
 
@@ -36,6 +38,7 @@ class SceneRead(BaseModel):
     negative_prompt: str | None
     seed: int | None
     duration_seconds: float
+    megapixels: float
     workflow_template_id: str | None
     selected_asset_id: str | None
     status: str

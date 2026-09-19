@@ -63,7 +63,7 @@ def test_generate_route_success_and_no_scene_mutation(api, monkeypatch):
         assert (current.status,current.prompt,current.seed)==("draft","prompt",11)
 
 
-@pytest.mark.parametrize("key",["seed","prompt","negative_prompt"])
+@pytest.mark.parametrize("key",["seed","prompt","negative_prompt","duration_seconds","megapixels"])
 def test_generate_route_rejects_reserved_params_without_job(api,key):
     scene,workflow=_deps(api); response=_post(f"/api/v1/scenes/{scene.id}/generate",{"workflow_template_id":workflow.id,"params":{key:1}})
     assert response.status_code==400 and response.json()["error"]["code"]=="GENERATION_PARAMS_INVALID"

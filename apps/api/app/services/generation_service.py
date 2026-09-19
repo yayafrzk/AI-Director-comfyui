@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
@@ -17,7 +18,7 @@ from app.services.workflow_loader import LoadedWorkflowTemplate, WorkflowLoadErr
 
 
 _logger = get_logger("generation")
-_RESERVED_PARAMS = {"prompt", "negative_prompt", "seed"}
+_RESERVED_PARAMS = {"prompt", "negative_prompt", "seed", "duration_seconds", "megapixels"}
 _CANCELLABLE_STATUSES = {"pending", "queued", "running"}
 _background_tasks: set[asyncio.Task[None]] = set()
 
@@ -53,8 +54,15 @@ def _start_listener(job_id: str, client_id: str, prompt_id_future: asyncio.Futur
     return task
 
 
+def _random_seed() -> int:
+    return secrets.randbelow(2**53)
+
+
 def _workflow_params(loaded: LoadedWorkflowTemplate, job: GenerationJob) -> dict[str, Any]:
     params = deepcopy(job.params_json)
+    for parameter_name in ("duration_seconds", "megapixels"):
+        if parameter_name not in loaded.manifest.inputs:
+            params.pop(parameter_name, None)
     if "prompt" in loaded.manifest.inputs:
         params["prompt"] = job.prompt_snapshot
     if "negative_prompt" in loaded.manifest.inputs:
@@ -112,6 +120,14 @@ async def submit_generation(
     if reserved:
         raise GenerationServiceError("GENERATION_PARAMS_INVALID", "Reserved generation parameter", 400)
 
+    resolved_seed = seed if seed is not None else scene.seed
+    if resolved_seed is None:
+        resolved_seed = _random_seed()
+
+    params_snapshot = deepcopy(params)
+    params_snapshot["duration_seconds"] = scene.duration_seconds
+    params_snapshot["megapixels"] = scene.megapixels
+
     job = GenerationJob(
         project_id=scene.project_id,
         scene_id=scene.id,
@@ -119,8 +135,8 @@ async def submit_generation(
         workflow_version=workflow_template.version,
         prompt_snapshot=scene.prompt or "",
         negative_prompt_snapshot=scene.negative_prompt,
-        seed=seed if seed is not None else scene.seed,
-        params_json=deepcopy(params),
+        seed=resolved_seed,
+        params_json=params_snapshot,
     )
     db.add(job)
     db.commit()

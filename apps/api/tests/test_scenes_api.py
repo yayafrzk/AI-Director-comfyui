@@ -251,3 +251,29 @@ def test_delete_scene_does_not_reorder_and_create_continues_from_maximum(api) ->
     assert created_after_delete["scene_number"] == 4
     assert first["scene_number"] == 1
     assert third["scene_number"] == 3
+
+def test_scene_megapixels_defaults_updates_and_rejects_invalid_values(api) -> None:
+    request, session_factory = api
+    project = _create_project(session_factory, "Megapixels project")
+
+    default_scene = _create_scene(request, project.id)
+    assert default_scene["megapixels"] == 0.6
+
+    configured_scene = _create_scene(request, project.id, megapixels=0.8)
+    assert configured_scene["megapixels"] == 0.8
+
+    update_response = request(
+        "PATCH",
+        f"/api/v1/scenes/{configured_scene['id']}",
+        {"megapixels": 1.2},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["data"]["megapixels"] == 1.2
+
+    for invalid_value in (0, 16.1, None):
+        invalid_response = request(
+            "PATCH",
+            f"/api/v1/scenes/{configured_scene['id']}",
+            {"megapixels": invalid_value},
+        )
+        assert invalid_response.status_code == 422

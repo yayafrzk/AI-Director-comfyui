@@ -23,6 +23,7 @@ type SceneDraft = {
   negativePrompt: string
   seed: string
   durationSeconds: string
+  megapixels: string
   workflowTemplateId: string
 }
 
@@ -38,6 +39,7 @@ function createDraft(scene: Scene): SceneDraft {
     negativePrompt: scene.negative_prompt ?? '',
     seed: scene.seed?.toString() ?? '',
     durationSeconds: scene.duration_seconds.toString(),
+    megapixels: scene.megapixels.toString(),
     workflowTemplateId: scene.workflow_template_id ?? '',
   }
 }
@@ -140,6 +142,17 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
       return
     }
 
+    const megapixels = Number(draft.megapixels)
+    if (
+      draft.megapixels.trim() === '' ||
+      !Number.isFinite(megapixels) ||
+      megapixels < 0.1 ||
+      megapixels > 16
+    ) {
+      setValidationError('分辨率必须在 0.1–16.0 MP 之间')
+      return
+    }
+
     let seed: number | null
     if (draft.seed.trim() === '') {
       seed = null
@@ -158,6 +171,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
     if (draft.negativePrompt !== (scene.negative_prompt ?? '')) sceneUpdate.negative_prompt = draft.negativePrompt
     if (seed !== scene.seed) sceneUpdate.seed = seed
     if (durationSeconds !== scene.duration_seconds) sceneUpdate.duration_seconds = durationSeconds
+    if (megapixels !== scene.megapixels) sceneUpdate.megapixels = megapixels
     const workflowTemplateId = draft.workflowTemplateId === '' ? null : draft.workflowTemplateId
     if (workflowTemplateId !== scene.workflow_template_id) sceneUpdate.workflow_template_id = workflowTemplateId
 
@@ -238,6 +252,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     className={inputClassName}
                     disabled={isFormDisabled}
                   />
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">实际输出时长会按当前 Workflow 的合法帧数规则调整。</p>
                 </Field>
               </div>
             </section>
@@ -301,6 +316,20 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     <p className="mt-2 text-xs text-[color:var(--text-muted)]">暂无 Workflow，请先注册 WorkflowTemplate</p>
                   ) : null}
                 </Field>
+                <Field label="分辨率（MP）" htmlFor="scene-megapixels">
+                  <input
+                    id="scene-megapixels"
+                    type="number"
+                    min="0.1"
+                    max="16"
+                    step="0.1"
+                    value={draft.megapixels}
+                    onChange={(event) => updateDraft('megapixels', event.target.value)}
+                    className={inputClassName}
+                    disabled={isFormDisabled}
+                  />
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">控制目标总像素量，支持 0.1–16.0 MP。</p>
+                </Field>
                 <Field label="Seed" htmlFor="scene-seed">
                   <input
                     id="scene-seed"
@@ -311,6 +340,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     className={inputClassName}
                     disabled={isFormDisabled}
                   />
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">留空时每次生成使用新的随机 Seed；填写后可固定复现。</p>
                 </Field>
               </div>
             </section>
@@ -345,6 +375,9 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                       <video className="mt-2 max-h-40 w-full" controls preload="metadata" src={`/api/v1/assets/${output.asset.id}/content`} />
                     )}
                     <p className="mt-2 text-xs text-[color:var(--text-muted)]">Job {job.status}</p>
+                    {job.seed !== null && job.seed !== undefined ? <p className="mt-1 text-xs text-[color:var(--text-muted)]">Seed：{job.seed}</p> : null}
+                    {typeof job.params_json?.duration_seconds === 'number' ? <p className="mt-1 text-xs text-[color:var(--text-muted)]">目标时长：{job.params_json.duration_seconds} 秒</p> : null}
+                    {typeof job.params_json?.megapixels === 'number' ? <p className="mt-1 text-xs text-[color:var(--text-muted)]">分辨率：{job.params_json.megapixels} MP</p> : null}
                     {output.asset.id === scene.selected_asset_id ? (
                       <p className="mt-3 text-sm text-[color:var(--accent)]">已选中</p>
                     ) : (

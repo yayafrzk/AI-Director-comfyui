@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 from app.db.base import Base
@@ -21,7 +22,22 @@ def _ensure_database_parent(database_engine: Engine) -> None:
         )
 
 
+def _ensure_scene_megapixels_column(database_engine: Engine) -> None:
+    if database_engine.dialect.name != "sqlite":
+        return
+
+    scene_columns = {column["name"] for column in inspect(database_engine).get_columns("scenes")}
+    if "megapixels" in scene_columns:
+        return
+
+    with database_engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE scenes ADD COLUMN megapixels FLOAT NOT NULL DEFAULT 0.6")
+        )
+
+
 def init_db(database_engine: Engine | None = None) -> None:
     target_engine = database_engine or engine
     _ensure_database_parent(target_engine)
     Base.metadata.create_all(bind=target_engine)
+    _ensure_scene_megapixels_column(target_engine)

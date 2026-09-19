@@ -8,6 +8,7 @@ export type Scene = {
   negative_prompt: string | null
   seed: number | null
   duration_seconds: number
+  megapixels: number
   workflow_template_id: string | null
   selected_asset_id: string | null
   status: string
@@ -22,6 +23,7 @@ export type SceneUpdate = {
   negative_prompt?: string | null
   seed?: number | null
   duration_seconds?: number
+  megapixels?: number
   workflow_template_id?: string | null
 }
 
@@ -32,5 +34,6 @@ export type SceneCreate = {
   negative_prompt?: string | null
   seed?: number | null
   duration_seconds: number
+  megapixels?: number
   workflow_template_id?: string | null
 }

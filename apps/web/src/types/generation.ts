@@ -12,6 +12,7 @@ export type GenerationJob = {
   prompt_snapshot?: string
   seed?: number | null
   workflow_version?: string
+  params_json?: Record<string, unknown>
   outputs?: GenerationOutput[]
 }
 
