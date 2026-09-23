@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { apiErrorMessage } from '../../lib/apiErrors'
-import { cancelGenerationJob, createScene, generateScene, getProjectScenes, getSceneGenerationJobs, reorderScenes, retryGenerationJob } from '../../services/scenes'
+import { cancelGenerationJob, createScene, getProjectScenes, getSceneGenerationJobs, reorderScenes } from '../../services/scenes'
 import { generationJobsKey, useGenerationEvents } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
 import type { Scene, SceneCreate } from '../../types/scene'
@@ -55,6 +55,7 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   const [draggingSceneId, setDraggingSceneId] = useState<string | null>(null)
   const [reorderError, setReorderError] = useState<{ projectId: string; message: string } | null>(null)
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
+  const [importSceneId, setImportSceneId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
   const [createDuration, setCreateDuration] = useState('5')
@@ -72,21 +73,19 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
   const jobsByScene = new Map(scenes.map((scene, index) => [scene.id, generationQueries[index]?.data?.[0]]))
   const generationJobs = [...jobsByScene.values()].filter((job): job is GenerationJob => job !== undefined)
   const activeGenerationJob = generationJobs.find((job) => ['pending', 'queued', 'running'].includes(job.status))
-  const hasCompletedVersionAwaitingSelection = scenes.some((scene) => {
-    const job = jobsByScene.get(scene.id)
-    return job?.status === 'completed' && (job.outputs?.length ?? 0) > 0 && scene.selected_asset_id === null
-  })
+  const hasCompletedVersionAwaitingSelection = scenes.some((scene, index) =>
+    scene.selected_asset_id === null &&
+    generationQueries[index]?.data?.some((job) => job.status === 'completed' && (job.outputs?.length ?? 0) > 0),
+  )
   const allScenesHaveFinalVersion = scenes.length > 0 && scenes.every((scene) => scene.selected_asset_id !== null)
   const flowStep =
     projectId === null || scenesQuery.isLoading || scenes.length === 0
       ? 1
-      : activeGenerationJob
-        ? 3
+      : allScenesHaveFinalVersion
+        ? 4
         : hasCompletedVersionAwaitingSelection
-          ? 4
-          : allScenesHaveFinalVersion
-            ? 5
-            : 2
+          ? 3
+          : 2
   const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
   const createMutation = useMutation({
     mutationFn: ({ projectId: createProjectId, scene }: CreateVariables) => createScene(createProjectId, scene),
@@ -121,19 +120,12 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
       reorderLockRef.current = false
     },
   })
-  const generateMutation = useMutation({ mutationFn: (scene: Scene) => generateScene(scene.id, scene.workflow_template_id!), onSuccess: (submitted, scene) => queryClient.setQueryData<GenerationJob[]>(generationJobsKey(scene.id), (jobs = []) => [{ id: submitted.job_id, scene_id: scene.id, status: submitted.status }, ...jobs]) })
   const cancelMutation = useMutation({
     mutationFn: (job: GenerationJob) => cancelGenerationJob(job.id),
     onSuccess: (cancelledJob) => {
       queryClient.setQueryData<GenerationJob[]>(generationJobsKey(cancelledJob.scene_id), (jobs = []) =>
         jobs.map((job) => (job.id === cancelledJob.id ? { ...job, ...cancelledJob } : job)),
       )
-    },
-  })
-  const retryMutation = useMutation({
-    mutationFn: (job: GenerationJob) => retryGenerationJob(job.id),
-    onSuccess: (_submitted, job) => {
-      void queryClient.invalidateQueries({ queryKey: generationJobsKey(job.scene_id) })
     },
   })
   const isSorting = draggingSceneId !== null || reorderMutation.isPending
@@ -147,15 +139,13 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
           ? '暂时无法判断下一步，请先解决分镜加载错误。'
           : scenes.length === 0
             ? '下一步：创建第一个分镜。'
-            : activeGenerationJob
-              ? '正在生成：任务状态会实时更新，完成后将自动归档到生成历史。'
+            : allScenesHaveFinalVersion
+              ? '下一步：所有分镜已选择最终版本，可以从右侧导出成果。'
               : hasCompletedVersionAwaitingSelection
-                ? '下一步：打开已完成的分镜，在生成历史中选择最终版本。'
-                : allScenesHaveFinalVersion
-                  ? '下一步：所有分镜已选择最终版本，可以从右侧导出成果。'
-                  : scenes.some((scene) => !scene.workflow_template_id)
-                    ? '下一步：打开未配置的分镜，选择 Workflow。'
-                    : '下一步：配置完成，可以开始生成。'
+                ? '下一步：打开分镜，在生成历史中选择最终版本。'
+                : activeGenerationJob
+                  ? '已有在线任务运行中；仍可打开分镜查看历史或导入现成结果。'
+                  : '下一步：打开分镜，从 ComfyUI 最新结果归入作品，或上传本地文件。手动导入无需连接 ComfyUI。'
 
   function handleOpenCreate() {
     if (projectId === null || createMutation.isPending) {
@@ -307,13 +297,11 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
           <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-[color:var(--text-muted)]">
             <li className={flowStepClass(flowStep === 1)}>1 分镜</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className={flowStepClass(flowStep === 2)}>2 配置</li>
+            <li className={flowStepClass(flowStep === 2)}>2 导入结果</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className={flowStepClass(flowStep === 3)}>3 生成</li>
+            <li className={flowStepClass(flowStep === 3)}>3 选最终版</li>
             <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className={flowStepClass(flowStep === 4)}>4 选最终版</li>
-            <li aria-hidden="true" className="text-[color:var(--text-muted)]">→</li>
-            <li className={flowStepClass(flowStep === 5)}>5 导出</li>
+            <li className={flowStepClass(flowStep === 4)}>4 导出</li>
           </ol>
         </div>
         <p role="status" aria-live="polite" className="mt-3 border-l-2 border-[color:var(--accent)] pl-3 text-xs leading-5 text-[color:var(--text-primary)]">{nextStepMessage}</p>
@@ -411,41 +399,28 @@ export function SceneWorkspace({ projectId }: SceneWorkspaceProps) {
               key={scene.id}
               scene={scene}
               generationJob={jobsByScene.get(scene.id)}
-              generating={generateMutation.isPending && generateMutation.variables?.id === scene.id}
               cancelling={cancelMutation.isPending && cancelMutation.variables?.id === jobsByScene.get(scene.id)?.id}
-              retrying={retryMutation.isPending && retryMutation.variables?.id === jobsByScene.get(scene.id)?.id}
-              generationError={
-                generateMutation.isError && generateMutation.variables?.id === scene.id
-                  ? apiErrorMessage(generateMutation.error, '生成提交失败')
-                  : null
-              }
               cancelError={
                 cancelMutation.isError && cancelMutation.variables?.id === jobsByScene.get(scene.id)?.id
                   ? apiErrorMessage(cancelMutation.error, '取消任务失败，请重试。')
                   : null
               }
-              retryError={
-                retryMutation.isError && retryMutation.variables?.id === jobsByScene.get(scene.id)?.id
-                  ? apiErrorMessage(retryMutation.error, '重试任务失败，请重试。')
-                  : null
-              }
-              onGenerate={(target) => generateMutation.mutate(target)}
               onCancel={(job) => cancelMutation.mutate(job)}
-              onRetry={(job) => retryMutation.mutate(job)}
               position={index}
               isSorting={isSorting}
               dragDisabled={dragDisabled}
               onDragStart={handleDragStart}
               onDragEnter={handleDragEnter}
               onDragEnd={handleDragEnd}
-              onOpen={setSelectedSceneId}
+              onOpen={(sceneId) => { setImportSceneId(null); setSelectedSceneId(sceneId) }}
+              onImport={(sceneId) => { setImportSceneId(sceneId); setSelectedSceneId(sceneId) }}
             />
           ))}
         </section>
       ) : null}
 
       {projectId !== null && selectedScene !== null ? (
-        <SceneDetailDrawer key={selectedScene.id} projectId={projectId} scene={selectedScene} onClose={() => setSelectedSceneId(null)} />
+        <SceneDetailDrawer key={selectedScene.id} projectId={projectId} scene={selectedScene} scrollToImport={importSceneId === selectedScene.id} onClose={() => { setSelectedSceneId(null); setImportSceneId(null) }} />
       ) : null}
     </main>
   )

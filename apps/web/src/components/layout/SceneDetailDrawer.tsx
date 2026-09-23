@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
@@ -14,6 +14,7 @@ import type { Scene, SceneUpdate } from '../../types/scene'
 type SceneDetailDrawerProps = {
   projectId: string
   scene: Scene
+  scrollToImport?: boolean
   onClose: () => void
 }
 
@@ -68,8 +69,13 @@ function createHistoryEntries(jobs: GenerationJob[] | undefined): HistoryEntry[]
   )
 }
 
-export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDrawerProps) {
+export function SceneDetailDrawer({ projectId, scene, scrollToImport = false, onClose }: SceneDetailDrawerProps) {
   const queryClient = useQueryClient()
+  const importSectionRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (scrollToImport) importSectionRef.current?.scrollIntoView({ block: 'start' })
+  }, [scrollToImport])
   const [draft, setDraft] = useState<SceneDraft>(() => createDraft(scene))
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -313,7 +319,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     className={inputClassName}
                     disabled={isFormDisabled}
                   />
-                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">实际输出时长会按当前 Workflow 的合法帧数规则调整。</p>
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">用于分镜规划；手动导入不会修改原视频时长。</p>
                 </Field>
               </div>
             </section>
@@ -345,7 +351,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
             </section>
 
             <section>
-              <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成参数</p>
+              <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">旧版在线生成参数（手动导入可跳过）</p>
               <div className="mt-3 space-y-4">
                 <Field label="Workflow" htmlFor="scene-workflow">
                   {/* V0.1: native select is intentional; custom listbox is deferred. */}
@@ -374,7 +380,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                   {workflowTemplatesQuery.isLoading ? <p className="mt-2 text-xs text-[color:var(--text-muted)]">正在加载 Workflow...</p> : null}
                   {workflowTemplatesQuery.isError ? <p className="mt-2 text-xs text-[color:var(--status-offline)]">Workflow 列表加载失败：{apiErrorMessage(workflowTemplatesQuery.error, 'Workflow 列表加载失败')}</p> : null}
                   {!workflowTemplatesQuery.isLoading && !workflowTemplatesQuery.isError && workflowTemplates.length === 0 ? (
-                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">暂无 Workflow，请先注册 WorkflowTemplate</p>
+                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">手动导入无需 Workflow；在线生成需先注册 WorkflowTemplate</p>
                   ) : null}
                 </Field>
                 <Field label="分辨率（MP）" htmlFor="scene-megapixels">
@@ -389,7 +395,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     className={inputClassName}
                     disabled={isFormDisabled}
                   />
-                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">控制目标总像素量，支持 0.1–16.0 MP。</p>
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">仅用于在线生成，支持 0.1–16.0 MP；手动导入不会改变原文件分辨率。</p>
                 </Field>
                 <Field label="Seed" htmlFor="scene-seed">
                   <input
@@ -401,7 +407,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
                     className={inputClassName}
                     disabled={isFormDisabled}
                   />
-                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">留空时每次生成使用新的随机 Seed；填写后可固定复现。</p>
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)]">仅用于在线生成；手动导入时可单独填写结果 Seed。</p>
                 </Field>
               </div>
             </section>
@@ -415,7 +421,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               {assetsQuery.isError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}</p> : null}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">{sceneInputAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.role === 'first_frame' ? '首帧' : '参考图'}</p><img className="mt-2 max-h-36 w-full object-contain" src={assetContentUrl(asset.id)} alt={asset.role === 'first_frame' ? '首帧' : '参考图'} /></div>)}</div>
             </section>
-            <ComfyUIOutputInbox projectId={projectId} scene={scene} />
+            <div ref={importSectionRef}><ComfyUIOutputInbox projectId={projectId} scene={scene} /></div>
             <section>
               <div className="flex items-center justify-between gap-3">
                 <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
