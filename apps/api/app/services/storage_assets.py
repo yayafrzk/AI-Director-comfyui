@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from uuid import uuid4
@@ -106,3 +107,34 @@ def cleanup_asset_file(path: Path) -> None:
         path.unlink()
     except FileNotFoundError:
         pass
+
+
+def store_asset_path(
+    project_id: str,
+    asset_type: str,
+    source_path: Path,
+    original_filename: str,
+) -> StoredAssetFile:
+    directory_name = _ASSET_DIRECTORIES[asset_type]
+    target_directory = asset_directory(project_id, asset_type)
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    file_token = uuid4().hex
+    final_name = f"{file_token}{_safe_extension(original_filename)}"
+    temporary_path = target_directory / f"{file_token}.tmp"
+    final_path = target_directory / final_name
+    try:
+        with source_path.open("rb") as source, temporary_path.open("wb") as destination:
+            shutil.copyfileobj(source, destination, _CHUNK_SIZE)
+        size_bytes = temporary_path.stat().st_size
+        os.replace(temporary_path, final_path)
+    except Exception:
+        cleanup_asset_file(temporary_path)
+        cleanup_asset_file(final_path)
+        raise
+
+    return StoredAssetFile(
+        relative_path=f"{directory_name}/{final_name}",
+        path=final_path,
+        size_bytes=size_bytes,
+    )

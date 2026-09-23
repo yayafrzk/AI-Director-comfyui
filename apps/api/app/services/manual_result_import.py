@@ -22,6 +22,7 @@ from app.services.media_thumbnail import (
     generate_video_thumbnail,
 )
 from app.services.storage_assets import (
+    StoredAssetFile,
     StoredThumbnailFile,
     cleanup_asset_file,
     create_thumbnail_file,
@@ -68,30 +69,22 @@ def _mime_type(upload: UploadFile, asset_type: str) -> str:
     return f"{asset_type}/{suffix.removeprefix('.')}" if suffix else "application/octet-stream"
 
 
-async def import_manual_result(
+def archive_stored_manual_result(
     db: Session,
     scene: Scene,
-    upload: UploadFile,
+    stored_file: StoredAssetFile,
+    asset_type: str,
+    mime_type: str,
+    source_params: dict,
     prompt_snapshot: str | None,
     negative_prompt_snapshot: str | None,
     seed: int | None,
     select_as_final: bool,
 ) -> GenerationJob:
-    asset_type = _asset_type(upload)
-    stored_file = None
     stored_thumbnail: StoredThumbnailFile | None = None
     committed = False
 
     try:
-        try:
-            stored_file = await store_asset_file(scene.project_id, asset_type, upload)
-        except Exception as error:
-            raise ManualResultImportError(
-                "MANUAL_RESULT_IMPORT_FAILED",
-                "Manual result import failed",
-                500,
-            ) from error
-
         width: int | None = None
         height: int | None = None
         duration_seconds: float | None = None
@@ -139,7 +132,7 @@ async def import_manual_result(
             thumbnail_path=(
                 stored_thumbnail.relative_path if stored_thumbnail is not None else None
             ),
-            mime_type=_mime_type(upload, asset_type),
+            mime_type=mime_type,
             width=width,
             height=height,
             duration_seconds=duration_seconds,
@@ -161,8 +154,7 @@ async def import_manual_result(
             ),
             seed=seed,
             params_json={
-                "source": "manual_import",
-                "source_filename": Path(upload.filename or "").name,
+                **source_params,
                 "duration_seconds": scene.duration_seconds,
                 "megapixels": scene.megapixels,
             },
@@ -197,7 +189,40 @@ async def import_manual_result(
             500,
         ) from error
     finally:
-        if not committed and stored_file is not None:
+        if not committed:
             cleanup_asset_file(stored_file.path)
             if stored_thumbnail is not None:
                 cleanup_asset_file(stored_thumbnail.path)
+
+
+async def import_manual_result(
+    db: Session,
+    scene: Scene,
+    upload: UploadFile,
+    prompt_snapshot: str | None,
+    negative_prompt_snapshot: str | None,
+    seed: int | None,
+    select_as_final: bool,
+) -> GenerationJob:
+    asset_type = _asset_type(upload)
+    try:
+        stored_file = await store_asset_file(scene.project_id, asset_type, upload)
+    except Exception as error:
+        raise ManualResultImportError(
+            "MANUAL_RESULT_IMPORT_FAILED",
+            "Manual result import failed",
+            500,
+        ) from error
+
+    return archive_stored_manual_result(
+        db,
+        scene,
+        stored_file,
+        asset_type,
+        _mime_type(upload, asset_type),
+        {"source": "manual_import", "source_filename": Path(upload.filename or "").name},
+        prompt_snapshot,
+        negative_prompt_snapshot,
+        seed,
+        select_as_final,
+    )

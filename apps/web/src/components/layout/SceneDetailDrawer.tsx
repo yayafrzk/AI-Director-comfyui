@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 
 import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
+import { ComfyUIOutputInbox } from '../output-inbox/ComfyUIOutputInbox'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
 import { deleteScene, getSceneGenerationJobs, importManualResult, selectSceneAsset, updateScene, type ManualResultImport } from '../../services/scenes'
 import { getWorkflowTemplates, workflowTemplatesKey } from '../../services/workflows'
@@ -414,6 +415,7 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               {assetsQuery.isError ? <p role="alert" className="mt-3 text-xs text-[color:var(--status-offline)]">素材加载失败：{apiErrorMessage(assetsQuery.error, '素材加载失败')}</p> : null}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">{sceneInputAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.role === 'first_frame' ? '首帧' : '参考图'}</p><img className="mt-2 max-h-36 w-full object-contain" src={assetContentUrl(asset.id)} alt={asset.role === 'first_frame' ? '首帧' : '参考图'} /></div>)}</div>
             </section>
+            <ComfyUIOutputInbox projectId={projectId} scene={scene} />
             <section>
               <div className="flex items-center justify-between gap-3">
                 <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
