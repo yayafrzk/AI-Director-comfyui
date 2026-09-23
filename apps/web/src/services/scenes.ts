@@ -63,6 +63,29 @@ export function deleteScene(sceneId: string): Promise<{ id: string }> {
 
 export type GenerationSubmit = { job_id: string; status: GenerationStatus }
 
+export type ManualResultImport = {
+  file: File
+  promptSnapshot: string
+  negativePromptSnapshot: string
+  seed: number | null
+  selectAsFinal: boolean
+}
+
+export function importManualResult(sceneId: string, result: ManualResultImport): Promise<GenerationJob> {
+  const formData = new FormData()
+  formData.append('file', result.file)
+  formData.append('prompt_snapshot', result.promptSnapshot)
+  formData.append('negative_prompt_snapshot', result.negativePromptSnapshot)
+  if (result.seed !== null) formData.append('seed', String(result.seed))
+  formData.append('select_as_final', String(result.selectAsFinal))
+  return requestJson<GenerationJob>(
+    '/api/v1/scenes/' + encodeURIComponent(sceneId) + '/manual-results',
+    { method: 'POST', body: formData },
+    'MANUAL_RESULT_IMPORT_FAILED',
+    '导入生成结果失败',
+  )
+}
+
 export function getSceneGenerationJobs(sceneId: string): Promise<GenerationJob[]> {
   return requestJson<GenerationJob[]>(
     '/api/v1/scenes/' + sceneId + '/generation-jobs',

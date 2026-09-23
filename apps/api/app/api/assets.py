@@ -14,6 +14,7 @@ from app.models.generation_output import GenerationOutput
 from app.models.project import Project
 from app.models.scene import Scene
 from app.schemas.asset import AssetRead, AssetType
+from app.schemas.generation_job import GenerationJobRead, GenerationOutputRead
 from app.schemas.scene import SceneRead
 from app.services.media_metadata import (
     FFprobeNotFoundError,
@@ -32,6 +33,10 @@ from app.services.media_thumbnail import (
     VideoThumbnailError,
     generate_video_thumbnail,
 )
+from app.services.manual_result_import import (
+    ManualResultImportError,
+    import_manual_result,
+)
 
 
 router = APIRouter(tags=["assets"])
@@ -47,6 +52,47 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 def _asset_not_found() -> JSONResponse:
     return _error(status.HTTP_404_NOT_FOUND, "ASSET_NOT_FOUND", "Asset not found")
+
+
+
+@router.post("/scenes/{scene_id}/manual-results", response_model=None)
+async def import_scene_manual_result(
+    scene_id: str,
+    file: Annotated[UploadFile, File()],
+    prompt_snapshot: Annotated[str | None, Form()] = None,
+    negative_prompt_snapshot: Annotated[str | None, Form()] = None,
+    seed: Annotated[int | None, Form()] = None,
+    select_as_final: Annotated[bool, Form()] = False,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    scene = db.get(Scene, scene_id)
+    if scene is None:
+        return _error(status.HTTP_404_NOT_FOUND, "SCENE_NOT_FOUND", "Scene not found")
+    try:
+        job = await import_manual_result(
+            db,
+            scene,
+            file,
+            prompt_snapshot,
+            negative_prompt_snapshot,
+            seed,
+            select_as_final,
+        )
+    except ManualResultImportError as error:
+        return _error(error.status_code, error.code, str(error))
+
+    response = GenerationJobRead.model_validate(job).model_copy(
+        update={
+            "outputs": [
+                GenerationOutputRead.model_validate(output)
+                for output in sorted(job.outputs, key=lambda output: output.output_index)
+            ]
+        }
+    )
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={"data": response.model_dump(mode="json"), "error": None},
+    )
 @router.get("/projects/{project_id}/assets", response_model=None)
 def list_project_assets(project_id: str, scene_id: str | None = Query(default=None), db: Session = Depends(get_db)) -> dict | JSONResponse:
     if db.get(Project, project_id) is None:

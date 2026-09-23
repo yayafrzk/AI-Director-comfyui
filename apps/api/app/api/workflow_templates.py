@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.workflow_template import WorkflowTemplate
 from app.schemas.workflow_template import WorkflowTemplateCreate, WorkflowTemplateRead
 from app.services.workflow_loader import WorkflowLoadError, load_workflow_template
+from app.services.system_workflows import MANUAL_IMPORT_WORKFLOW_SLUG
 
 router = APIRouter(tags=["workflow-templates"])
 
@@ -18,7 +19,11 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 @router.get("/workflow-templates", response_model=None)
 def list_workflow_templates(db: Session = Depends(get_db)) -> dict:
-    templates = db.scalars(select(WorkflowTemplate).order_by(WorkflowTemplate.created_at.asc(), WorkflowTemplate.id.asc())).all()
+    templates = db.scalars(
+        select(WorkflowTemplate)
+        .where(WorkflowTemplate.slug != MANUAL_IMPORT_WORKFLOW_SLUG)
+        .order_by(WorkflowTemplate.created_at.asc(), WorkflowTemplate.id.asc())
+    ).all()
     return {"data": [WorkflowTemplateRead.model_validate(item) for item in templates], "error": None}
 
 

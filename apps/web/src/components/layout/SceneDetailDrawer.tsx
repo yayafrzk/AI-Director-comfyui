@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { apiErrorMessage } from '../../lib/apiErrors'
 import { AssetUploadControl } from '../assets/AssetUploadControl'
 import { assetContentUrl, getProjectAssets, projectAssetsKey } from '../../services/assets'
-import { deleteScene, getSceneGenerationJobs, selectSceneAsset, updateScene } from '../../services/scenes'
+import { deleteScene, getSceneGenerationJobs, importManualResult, selectSceneAsset, updateScene, type ManualResultImport } from '../../services/scenes'
 import { getWorkflowTemplates, workflowTemplatesKey } from '../../services/workflows'
 import { generationJobsKey } from '../../hooks/useGenerationEvents'
 import type { GenerationJob } from '../../types/generation'
@@ -74,6 +74,13 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
   const [saveError, setSaveError] = useState<string | null>(null)
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [manualImportOpen, setManualImportOpen] = useState(false)
+  const [manualImportFile, setManualImportFile] = useState<File | null>(null)
+  const [manualImportPrompt, setManualImportPrompt] = useState(scene.prompt ?? '')
+  const [manualImportNegativePrompt, setManualImportNegativePrompt] = useState(scene.negative_prompt ?? '')
+  const [manualImportSeed, setManualImportSeed] = useState('')
+  const [manualImportSelectAsFinal, setManualImportSelectAsFinal] = useState(false)
+  const [manualImportError, setManualImportError] = useState<string | null>(null)
   const historyQuery = useQuery({ queryKey: generationJobsKey(scene.id), queryFn: () => getSceneGenerationJobs(scene.id) })
   const assetsQuery = useQuery({ queryKey: projectAssetsKey(projectId), queryFn: () => getProjectAssets(projectId) })
   const workflowTemplatesQuery = useQuery({ queryKey: workflowTemplatesKey(), queryFn: getWorkflowTemplates })
@@ -111,7 +118,23 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
       setDeleteError(apiErrorMessage(error, '删除分镜失败'))
     },
   })
-  const isBusy = saveMutation.isPending || deleteMutation.isPending || selectAssetMutation.isPending
+  const manualImportMutation = useMutation<GenerationJob, Error, ManualResultImport>({
+    mutationFn: (result) => importManualResult(scene.id, result),
+    onSuccess: (job) => {
+      queryClient.setQueryData<GenerationJob[]>(generationJobsKey(scene.id), (jobs = []) => [job, ...jobs])
+      queryClient.invalidateQueries({ queryKey: projectAssetsKey(projectId) })
+      queryClient.invalidateQueries({ queryKey: sceneQueryKey(projectId) })
+      setManualImportOpen(false)
+      setManualImportFile(null)
+      setManualImportSeed('')
+      setManualImportSelectAsFinal(false)
+      setManualImportError(null)
+    },
+    onError: (error) => {
+      setManualImportError(apiErrorMessage(error, '导入生成结果失败'))
+    },
+  })
+  const isBusy = saveMutation.isPending || deleteMutation.isPending || selectAssetMutation.isPending || manualImportMutation.isPending
   const isFormDisabled = isBusy || deleteConfirmationOpen
 
   function updateDraft(field: keyof SceneDraft, value: string) {
@@ -131,6 +154,43 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
     }
     setDeleteError(null)
     setDeleteConfirmationOpen(false)
+  }
+
+  function openManualImport() {
+    setManualImportPrompt(scene.prompt ?? '')
+    setManualImportNegativePrompt(scene.negative_prompt ?? '')
+    setManualImportSeed('')
+    setManualImportSelectAsFinal(false)
+    setManualImportFile(null)
+    setManualImportError(null)
+    setManualImportOpen(true)
+  }
+
+  function closeManualImport() {
+    if (manualImportMutation.isPending) return
+    setManualImportOpen(false)
+    setManualImportFile(null)
+    setManualImportError(null)
+  }
+
+  function submitManualImport() {
+    if (manualImportFile === null) {
+      setManualImportError('请选择要归档的图片或视频')
+      return
+    }
+    const parsedSeed = manualImportSeed.trim() === '' ? null : Number(manualImportSeed)
+    if (parsedSeed !== null && !Number.isSafeInteger(parsedSeed)) {
+      setManualImportError('Seed 必须是有效整数，或留空')
+      return
+    }
+    setManualImportError(null)
+    manualImportMutation.mutate({
+      file: manualImportFile,
+      promptSnapshot: manualImportPrompt,
+      negativePromptSnapshot: manualImportNegativePrompt,
+      seed: parsedSeed,
+      selectAsFinal: manualImportSelectAsFinal,
+    })
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -355,7 +415,61 @@ export function SceneDetailDrawer({ projectId, scene, onClose }: SceneDetailDraw
               <div className="mt-3 grid gap-3 sm:grid-cols-2">{sceneInputAssets.map((asset) => <div key={asset.id} className="border border-[color:var(--border-subtle)] p-2"><p className="text-xs text-[color:var(--text-muted)]">{asset.role === 'first_frame' ? '首帧' : '参考图'}</p><img className="mt-2 max-h-36 w-full object-contain" src={assetContentUrl(asset.id)} alt={asset.role === 'first_frame' ? '首帧' : '参考图'} /></div>)}</div>
             </section>
             <section>
-              <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-mono text-[0.625rem] tracking-[0.16em] text-[color:var(--accent)]">生成历史</p>
+                {!manualImportOpen ? (
+                  <button
+                    type="button"
+                    onClick={openManualImport}
+                    disabled={isFormDisabled}
+                    className="border border-[color:var(--accent)] px-3 py-1.5 text-xs text-[color:var(--accent)] hover:bg-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    + 导入生成结果
+                  </button>
+                ) : null}
+              </div>
+              {manualImportOpen ? (
+                <div className="mt-3 border border-[color:var(--accent)] bg-[var(--accent-soft)] p-3">
+                  <p className="text-xs leading-5 text-[color:var(--text-muted)]">用于归档在 ComfyUI 或其他工具中手动生成的图片 / 视频。</p>
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label htmlFor="manual-result-file" className="text-xs text-[color:var(--text-primary)]">文件</label>
+                      <input
+                        id="manual-result-file"
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={(event) => {
+                          setManualImportFile(event.target.files?.[0] ?? null)
+                          setManualImportError(null)
+                        }}
+                        disabled={manualImportMutation.isPending}
+                        className="mt-2 block w-full text-xs text-[color:var(--text-muted)] file:mr-3 file:border file:border-[color:var(--accent)] file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:text-[color:var(--accent)] disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="manual-result-prompt" className="text-xs text-[color:var(--text-primary)]">Prompt</label>
+                      <textarea id="manual-result-prompt" rows={3} value={manualImportPrompt} onChange={(event) => setManualImportPrompt(event.target.value)} disabled={manualImportMutation.isPending} className={`${textareaClassName} mt-2`} />
+                    </div>
+                    <div>
+                      <label htmlFor="manual-result-negative-prompt" className="text-xs text-[color:var(--text-primary)]">Negative Prompt</label>
+                      <textarea id="manual-result-negative-prompt" rows={2} value={manualImportNegativePrompt} onChange={(event) => setManualImportNegativePrompt(event.target.value)} disabled={manualImportMutation.isPending} className={`${textareaClassName} mt-2`} />
+                    </div>
+                    <div>
+                      <label htmlFor="manual-result-seed" className="text-xs text-[color:var(--text-primary)]">Seed（可选）</label>
+                      <input id="manual-result-seed" type="number" step="1" value={manualImportSeed} onChange={(event) => setManualImportSeed(event.target.value)} disabled={manualImportMutation.isPending} className={`${inputClassName} mt-2`} />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--text-primary)]">
+                      <input type="checkbox" checked={manualImportSelectAsFinal} onChange={(event) => setManualImportSelectAsFinal(event.target.checked)} disabled={manualImportMutation.isPending} />
+                      导入后设为最终版本
+                    </label>
+                    {manualImportError ? <p role="alert" className="text-xs text-[color:var(--status-offline)]">{manualImportError}</p> : null}
+                    <div className="flex justify-end gap-3">
+                      <button type="button" onClick={closeManualImport} disabled={manualImportMutation.isPending} className="border border-[color:var(--border-subtle)] px-3 py-1.5 text-xs text-[color:var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-50">取消</button>
+                      <button type="button" onClick={submitManualImport} disabled={manualImportMutation.isPending} className="border border-[color:var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs text-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-50">{manualImportMutation.isPending ? '导入中...' : '导入'}</button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {historyQuery.isLoading ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">加载生成历史...</p> : null}
               {historyQuery.isError ? <p className="mt-3 text-sm text-[color:var(--status-offline)]">生成历史加载失败：{apiErrorMessage(historyQuery.error, '生成历史加载失败')}</p> : null}
               {!historyQuery.isLoading && !historyQuery.isError && historyQuery.data?.length === 0 ? <p className="mt-3 text-sm text-[color:var(--text-muted)]">暂无生成历史</p> : null}
